@@ -72,7 +72,8 @@ public:
      */
     PyHeliosSimulation(
         std::string surveyPath,
-        std::vector<std::string> assetsPath = std::vector<std::string>{"assets/"},
+        //std::vector<std::string> assetsPath = std::vector<std::string>{"assets/"},
+        boost::python::list assetsPath,
         std::string outputPath = "output/",
         size_t numThreads = 0,
         bool lasOutput = false,

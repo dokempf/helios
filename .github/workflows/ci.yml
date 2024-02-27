@@ -23,7 +23,7 @@ jobs:
           - macos-latest
           - windows-latest
         python:
-          - "3.8"
+          # - "3.8"
           - "3.12"
     
     defaults:
@@ -45,9 +45,11 @@ jobs:
 
       - name: Install Helios
         run: |
-          CMAKE_PREFIX_PATH=${CONDA_PREFIX} python -m pip install -v .
+          python -m pip install -v .
       
       - name: Run tests
         run: |
+          pwd
+          ls -al
           python -m pytest -m exe
           python -m pytest -m pyh
