@@ -1,12 +1,18 @@
 #include <boost/lexical_cast.hpp>
 #include <boost/lexical_cast/bad_lexical_cast.hpp>
 
+#include <algorithm>
+
 #include <AABB.h>
+#include <DetailedVoxel.h>
 #include <Primitive.h>
 #include <ScenePart.h>
 #include <Triangle.h>
+#include <Voxel.h>
 #include <WavefrontObj.h>
 #include <util/logger/logging.hpp>
+
+#include <glm/glm.hpp>
 
 // ***  CONSTRUCTION / DESTRUCTION  *** //
 // ************************************ //
@@ -26,6 +32,9 @@ ScenePart::ScenePart(ScenePart const& sp, bool const shallowPrimitives)
   this->mEnv = nullptr; // TODO Copy this too
 
   this->primitiveType = sp.primitiveType;
+  this->triangles = sp.triangles;
+  this->voxels = sp.voxels;
+  this->detailed_voxels = sp.detailed_voxels;
   this->mPrimitives = std::vector<Primitive*>(0);
   Primitive* p;
 
@@ -62,6 +71,10 @@ ScenePart::operator=(const ScenePart& rhs)
   this->mCrs = nullptr; // TODO Copy this too
   this->mEnv = nullptr; // TODO Copy this too
 
+  this->primitiveType = rhs.primitiveType;
+  this->triangles = rhs.triangles;
+  this->voxels = rhs.voxels;
+  this->detailed_voxels = rhs.detailed_voxels;
   this->mPrimitives = std::vector<Primitive*>(0);
   Primitive* p;
   for (size_t i = 0; i < rhs.mPrimitives.size(); i++) {
@@ -252,6 +265,235 @@ ScenePart::computeCentroid(bool const computeBound)
 }
 
 void
+ScenePart::clearBulkData()
+{
+  triangles.clear();
+  voxels.clear();
+  detailed_voxels.clear();
+}
+
+void
+ScenePart::buildBulkFromPrimitives()
+{
+  clearBulkData();
+  if (mPrimitives.empty())
+    return;
+
+  if (primitiveType == PrimitiveType::TRIANGLE) {
+    std::size_t const n = mPrimitives.size();
+    triangles.vertices.reserve(3 * n);
+    triangles.face_normal.reserve(n);
+    triangles.e1.reserve(n);
+    triangles.e2.reserve(n);
+    triangles.v0.reserve(n);
+    triangles.eps.reserve(n);
+    triangles.aabb_min.reserve(n);
+    triangles.aabb_max.reserve(n);
+    triangles.materials.reserve(n);
+
+    for (Primitive* primitive : mPrimitives) {
+      Triangle* t = dynamic_cast<Triangle*>(primitive);
+      if (t == nullptr) {
+        logging::WARN(
+          "ScenePart::buildBulkFromPrimitives found non-triangle primitive");
+        clearBulkData();
+        return;
+      }
+
+      Vertex* verts = t->getVertices();
+      triangles.vertices.push_back(verts[0]);
+      triangles.vertices.push_back(verts[1]);
+      triangles.vertices.push_back(verts[2]);
+
+      glm::dvec3 v0 = verts[0].pos;
+      glm::dvec3 e1 = verts[1].pos - v0;
+      glm::dvec3 e2 = verts[2].pos - v0;
+      glm::dvec3 normal = glm::cross(e1, e2);
+      double const normal_len = glm::length(normal);
+      if (normal_len > 0.0)
+        normal = normal / normal_len;
+
+      triangles.v0.push_back(v0);
+      triangles.e1.push_back(e1);
+      triangles.e2.push_back(e2);
+      triangles.face_normal.push_back(normal);
+      triangles.eps.push_back(0.0000001);
+
+      double minX =
+        std::min(std::min(verts[0].getX(), verts[1].getX()), verts[2].getX());
+      double minY =
+        std::min(std::min(verts[0].getY(), verts[1].getY()), verts[2].getY());
+      double minZ =
+        std::min(std::min(verts[0].getZ(), verts[1].getZ()), verts[2].getZ());
+      double maxX =
+        std::max(std::max(verts[0].getX(), verts[1].getX()), verts[2].getX());
+      double maxY =
+        std::max(std::max(verts[0].getY(), verts[1].getY()), verts[2].getY());
+      double maxZ =
+        std::max(std::max(verts[0].getZ(), verts[1].getZ()), verts[2].getZ());
+      triangles.aabb_min.push_back(glm::dvec3(minX, minY, minZ));
+      triangles.aabb_max.push_back(glm::dvec3(maxX, maxY, maxZ));
+
+      triangles.materials.push_back(t->material);
+    }
+    return;
+  }
+
+  if (primitiveType == PrimitiveType::VOXEL) {
+    std::size_t const n = mPrimitives.size();
+    voxels.centers.reserve(n);
+    voxels.half_size.reserve(n);
+    voxels.num_points.reserve(n);
+    voxels.r.reserve(n);
+    voxels.g.reserve(n);
+    voxels.b.reserve(n);
+    voxels.color.reserve(n);
+    voxels.aabb_min.reserve(n);
+    voxels.aabb_max.reserve(n);
+    voxels.materials.reserve(n);
+
+    detailed_voxels.present.reserve(n);
+    detailed_voxels.int_values.reserve(n);
+    detailed_voxels.double_values.reserve(n);
+    detailed_voxels.max_pad.reserve(n);
+
+    for (Primitive* primitive : mPrimitives) {
+      Voxel* v = dynamic_cast<Voxel*>(primitive);
+      if (v == nullptr) {
+        logging::WARN(
+          "ScenePart::buildBulkFromPrimitives found non-voxel primitive");
+        clearBulkData();
+        return;
+      }
+
+      voxels.centers.push_back(v->v);
+      voxels.half_size.push_back(v->halfSize);
+      voxels.num_points.push_back(v->numPoints);
+      voxels.r.push_back(v->r);
+      voxels.g.push_back(v->g);
+      voxels.b.push_back(v->b);
+      voxels.color.push_back(v->color);
+      voxels.materials.push_back(v->material);
+
+      glm::dvec3 hs = glm::dvec3(v->halfSize, v->halfSize, v->halfSize);
+      voxels.aabb_min.push_back(v->v.pos - hs);
+      voxels.aabb_max.push_back(v->v.pos + hs);
+
+      DetailedVoxel* dv = dynamic_cast<DetailedVoxel*>(primitive);
+      if (dv == nullptr) {
+        detailed_voxels.present.push_back(0);
+        detailed_voxels.int_values.emplace_back();
+        detailed_voxels.double_values.emplace_back();
+        detailed_voxels.max_pad.push_back(0.0);
+        continue;
+      }
+
+      detailed_voxels.present.push_back(1);
+      std::vector<int> int_values;
+      int_values.reserve(dv->getNumberOfIntValues());
+      for (std::size_t i = 0; i < dv->getNumberOfIntValues(); ++i)
+        int_values.push_back(dv->getIntValue(i));
+      detailed_voxels.int_values.push_back(std::move(int_values));
+
+      std::vector<double> double_values;
+      double_values.reserve(dv->getNumberOfDoubleValues());
+      for (std::size_t i = 0; i < dv->getNumberOfDoubleValues(); ++i)
+        double_values.push_back(dv->getDoubleValue(i));
+      detailed_voxels.double_values.push_back(std::move(double_values));
+
+      detailed_voxels.max_pad.push_back(dv->getMaxPad());
+    }
+  }
+}
+
+void
+ScenePart::buildPrimitivesFromBulk(bool const clearExisting)
+{
+  if (clearExisting) {
+    for (Primitive* p : mPrimitives)
+      delete p;
+    mPrimitives.clear();
+  }
+
+  if (primitiveType == PrimitiveType::TRIANGLE) {
+    if (triangles.vertices.size() % 3 != 0) {
+      logging::WARN("ScenePart::buildPrimitivesFromBulk triangle vertex count "
+                    "is not a multiple of 3");
+      return;
+    }
+
+    std::size_t const n = triangles.vertices.size() / 3;
+    mPrimitives.reserve(mPrimitives.size() + n);
+    for (std::size_t i = 0; i < n; ++i) {
+      Vertex v0 = triangles.vertices[3 * i + 0];
+      Vertex v1 = triangles.vertices[3 * i + 1];
+      Vertex v2 = triangles.vertices[3 * i + 2];
+      Triangle* t = new Triangle(v0, v1, v2);
+      if (i < triangles.materials.size())
+        t->material = triangles.materials[i];
+      mPrimitives.push_back(t);
+    }
+    return;
+  }
+
+  if (primitiveType == PrimitiveType::VOXEL) {
+    std::size_t const n = voxels.centers.size();
+    mPrimitives.reserve(mPrimitives.size() + n);
+    for (std::size_t i = 0; i < n; ++i) {
+      bool const isDetailed =
+        (i < detailed_voxels.present.size() && detailed_voxels.present[i] != 0);
+      Primitive* p = nullptr;
+
+      if (isDetailed) {
+        std::vector<int> int_values;
+        std::vector<double> double_values;
+        if (i < detailed_voxels.int_values.size())
+          int_values = detailed_voxels.int_values[i];
+        if (i < detailed_voxels.double_values.size())
+          double_values = detailed_voxels.double_values[i];
+
+        DetailedVoxel* dv = new DetailedVoxel(voxels.centers[i].pos.x,
+                                              voxels.centers[i].pos.y,
+                                              voxels.centers[i].pos.z,
+                                              voxels.half_size[i],
+                                              std::move(int_values),
+                                              std::move(double_values));
+        if (i < detailed_voxels.max_pad.size())
+          dv->setMaxPad(detailed_voxels.max_pad[i]);
+        p = dv;
+      } else {
+        p = new Voxel(voxels.centers[i].pos.x,
+                      voxels.centers[i].pos.y,
+                      voxels.centers[i].pos.z,
+                      voxels.half_size[i]);
+      }
+
+      Voxel* v = dynamic_cast<Voxel*>(p);
+      if (v != nullptr) {
+        v->v = voxels.centers[i];
+        if (i < voxels.half_size.size())
+          v->halfSize = voxels.half_size[i];
+        if (i < voxels.num_points.size())
+          v->numPoints = voxels.num_points[i];
+        if (i < voxels.r.size())
+          v->r = voxels.r[i];
+        if (i < voxels.g.size())
+          v->g = voxels.g[i];
+        if (i < voxels.b.size())
+          v->b = voxels.b[i];
+        if (i < voxels.color.size())
+          v->color = voxels.color[i];
+        v->update();
+      }
+
+      if (i < voxels.materials.size())
+        p->material = voxels.materials[i];
+      mPrimitives.push_back(p);
+    }
+  }
+}
+
+void
 ScenePart::computeTransformations(std::shared_ptr<ScenePart> sp,
                                   bool const holistic)
 {
@@ -278,6 +520,7 @@ ScenePart::release()
     delete p;
   }
   mPrimitives.clear();
+  clearBulkData();
   if (sorh != nullptr) {
     for (Primitive* p : sorh->getBaselinePrimitives()) {
       delete p;

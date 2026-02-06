@@ -9,6 +9,8 @@ class WavefrontObj;
 #include <Vertex.h>
 #include <maths/Rotation.h>
 
+#include <assetloading/ScenePartGeometry.h>
+
 #include <armadillo>
 #include <iostream>
 #include <memory>
@@ -78,6 +80,18 @@ public:
    * @see ScenePart::PrimitiveType
    */
   PrimitiveType primitiveType;
+  /**
+   * @brief Bulk triangle data (per-triangle vertices).
+   */
+  TriangleBulk triangles;
+  /**
+   * @brief Bulk voxel data.
+   */
+  VoxelBulk voxels;
+  /**
+   * @brief Bulk detailed voxel data (extras aligned to voxels).
+   */
+  DetailedVoxelBulk detailed_voxels;
   /**
    * @brief Vector of pointers to primitives used by this scene part
    */
@@ -349,6 +363,21 @@ public:
   {
     return sorh;
   }
+
+  /**
+   * @brief Clear all bulk geometry containers.
+   */
+  void clearBulkData();
+  /**
+   * @brief Populate bulk geometry containers from current primitives.
+   */
+  void buildBulkFromPrimitives();
+  /**
+   * @brief Populate primitives from current bulk geometry containers.
+   *
+   * NOTE: This method deletes current primitives when clearExisting is true.
+   */
+  void buildPrimitivesFromBulk(bool const clearExisting = true);
 
   /**
    * @brief Check whether the scene part is null, according to the underlying
