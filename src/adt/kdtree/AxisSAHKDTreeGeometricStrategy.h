@@ -66,7 +66,7 @@ protected:
    */
   void GEOM_defineSplit(KDTreeNode* node,
                         KDTreeNode* parent,
-                        std::vector<Primitive*>& primitives,
+                        std::vector<PrimitiveRef>& primitives,
                         int const depth,
                         int const assignedThreads) const override;
 };

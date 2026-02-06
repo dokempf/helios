@@ -5,7 +5,7 @@
 #include <KDTreeRaycaster.h>
 #include <LightKDTreeNode.h>
 #include <RaycasterGroveTree.h>
-#include <adt/custom/PointerVector.h>
+#include <memory>
 
 /**
  * @author Alberto M. Esmoris Pena
@@ -32,7 +32,7 @@ protected:
    * @brief The cache of primitives defining the last state for the root node
    *  of the raycasting process
    */
-  std::shared_ptr<PointerVector<Primitive>> cache_prims;
+  std::shared_ptr<ScenePart> cache_part;
 
 public:
   // ***  CONSTRUCTION / DESTRUCTION  *** //
@@ -41,13 +41,12 @@ public:
    * @brief Default Grove KDTree ray caster constructor
    * @param root Root node of the KDTree
    */
-  GroveKDTreeRaycaster(
-    std::shared_ptr<LightKDTreeNode> root,
-    std::shared_ptr<KDTreeFactory> kdtf = nullptr,
-    std::shared_ptr<PointerVector<Primitive>> cache_prims = nullptr)
+  GroveKDTreeRaycaster(std::shared_ptr<LightKDTreeNode> root,
+                       std::shared_ptr<KDTreeFactory> kdtf = nullptr,
+                       std::shared_ptr<ScenePart> cache_part = nullptr)
     : KDTreeRaycaster(root)
     , kdtf(kdtf)
-    , cache_prims(cache_prims)
+    , cache_part(cache_part)
   {
   }
   /**
@@ -105,12 +104,10 @@ public:
   virtual std::shared_ptr<GroveKDTreeRaycaster> makeTemporalClone() const;
 
   /**
-   * @brief Generate a shared pointer to a copy of the given vector of
-   *  primitives. Copy implies that primitives are cloned. Thus, deleting
-   *  copied primitives will not delete source primitives.
-   * @param src The source primitives to be copied
-   * @return Shared pointer to a vector of cloned primitives
+   * @brief Access the cached scene part snapshot.
    */
-  std::shared_ptr<PointerVector<Primitive>> sharedCopy(
-    std::vector<Primitive*> const& src) const;
+  inline std::shared_ptr<ScenePart> const& getCachePart() const
+  {
+    return cache_part;
+  }
 };

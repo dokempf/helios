@@ -15,7 +15,7 @@ public:
   }
 
   KDTreeNodeRoot* makeFromPrimitivesUnsafe(
-    std::vector<Primitive*>& primitives,
+    std::vector<PrimitiveRef>& primitives,
     bool const computeStats = false,
     bool const reportStats = false) override
   {

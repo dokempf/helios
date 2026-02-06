@@ -3,8 +3,7 @@
 #include <FastSAHKDTreeFactory.h>
 #include <GroveKDTreeRaycaster.h>
 #include <KDGrove.h>
-#include <Primitive.h>
-#include <Triangle.h>
+#include <ScenePart.h>
 
 #include <memory>
 #include <vector>
@@ -13,7 +12,7 @@ struct GroveTestFixture
 {
   KDGrove kdg;
   std::vector<std::shared_ptr<GroveKDTreeRaycaster>> trees;
-  std::vector<std::vector<Primitive*>> primitives;
+  std::vector<std::shared_ptr<ScenePart>> parts;
 
   GroveTestFixture()
   {
@@ -22,72 +21,121 @@ struct GroveTestFixture
     buildGrove();
   }
 
-  ~GroveTestFixture()
-  {
-    for (auto& tris : primitives) {
-      for (Primitive* tri : tris) {
-        delete static_cast<Triangle*>(tri);
-      }
-    }
-  }
-
   void buildPrimitives()
   {
     // First tree
-    std::vector<Primitive*> tris1;
-    tris1.push_back(
-      new Triangle(Vertex(-1, -1, -1), Vertex(1, -1, -1), Vertex(0, 1, -1)));
-    tris1.push_back(
-      new Triangle(Vertex(-1, -1, -1), Vertex(1, -1, -1), Vertex(0, 0, 1)));
-    tris1.push_back(
-      new Triangle(Vertex(1, -1, -1), Vertex(0, 0, 1), Vertex(0, 1, -1)));
-    tris1.push_back(
-      new Triangle(Vertex(0, 1, -1), Vertex(0, 0, 1), Vertex(-1, -1, -1)));
-    primitives.push_back(tris1);
+    auto part1 = std::make_shared<ScenePart>();
+    part1->primitiveType = ScenePart::PrimitiveType::TRIANGLE;
+    appendTriangleBulk(part1->triangles,
+                       Vertex(-1, -1, -1),
+                       Vertex(1, -1, -1),
+                       Vertex(0, 1, -1),
+                       nullptr);
+    appendTriangleBulk(part1->triangles,
+                       Vertex(-1, -1, -1),
+                       Vertex(1, -1, -1),
+                       Vertex(0, 0, 1),
+                       nullptr);
+    appendTriangleBulk(part1->triangles,
+                       Vertex(1, -1, -1),
+                       Vertex(0, 0, 1),
+                       Vertex(0, 1, -1),
+                       nullptr);
+    appendTriangleBulk(part1->triangles,
+                       Vertex(0, 1, -1),
+                       Vertex(0, 0, 1),
+                       Vertex(-1, -1, -1),
+                       nullptr);
+    part1->buildPrimitiveViewsFromBulk();
+    parts.push_back(part1);
 
     // Second tree
-    std::vector<Primitive*> tris2;
-    tris2.push_back(
-      new Triangle(Vertex(0, 0, -1), Vertex(2, 0, -1), Vertex(1, 2, -1)));
-    tris2.push_back(
-      new Triangle(Vertex(0, 0, -1), Vertex(2, 0, -1), Vertex(1, 1, 1)));
-    tris2.push_back(
-      new Triangle(Vertex(2, 0, -1), Vertex(1, 1, 1), Vertex(1, 2, -1)));
-    tris2.push_back(
-      new Triangle(Vertex(1, 2, -1), Vertex(1, 1, 1), Vertex(0, 0, -1)));
-    primitives.push_back(tris2);
+    auto part2 = std::make_shared<ScenePart>();
+    part2->primitiveType = ScenePart::PrimitiveType::TRIANGLE;
+    appendTriangleBulk(part2->triangles,
+                       Vertex(0, 0, -1),
+                       Vertex(2, 0, -1),
+                       Vertex(1, 2, -1),
+                       nullptr);
+    appendTriangleBulk(part2->triangles,
+                       Vertex(0, 0, -1),
+                       Vertex(2, 0, -1),
+                       Vertex(1, 1, 1),
+                       nullptr);
+    appendTriangleBulk(part2->triangles,
+                       Vertex(2, 0, -1),
+                       Vertex(1, 1, 1),
+                       Vertex(1, 2, -1),
+                       nullptr);
+    appendTriangleBulk(part2->triangles,
+                       Vertex(1, 2, -1),
+                       Vertex(1, 1, 1),
+                       Vertex(0, 0, -1),
+                       nullptr);
+    part2->buildPrimitiveViewsFromBulk();
+    parts.push_back(part2);
 
     // Third tree
-    std::vector<Primitive*> tris3;
-    tris3.push_back(
-      new Triangle(Vertex(4, 4, -1), Vertex(6, 4, -1), Vertex(5, 6, -1)));
-    tris3.push_back(
-      new Triangle(Vertex(4, 4, -1), Vertex(6, 4, -1), Vertex(5, 5, 1)));
-    tris3.push_back(
-      new Triangle(Vertex(6, 4, -1), Vertex(5, 5, 1), Vertex(5, 6, -1)));
-    tris3.push_back(
-      new Triangle(Vertex(5, 6, -1), Vertex(5, 5, 1), Vertex(4, 4, -1)));
-    primitives.push_back(tris3);
+    auto part3 = std::make_shared<ScenePart>();
+    part3->primitiveType = ScenePart::PrimitiveType::TRIANGLE;
+    appendTriangleBulk(part3->triangles,
+                       Vertex(4, 4, -1),
+                       Vertex(6, 4, -1),
+                       Vertex(5, 6, -1),
+                       nullptr);
+    appendTriangleBulk(part3->triangles,
+                       Vertex(4, 4, -1),
+                       Vertex(6, 4, -1),
+                       Vertex(5, 5, 1),
+                       nullptr);
+    appendTriangleBulk(part3->triangles,
+                       Vertex(6, 4, -1),
+                       Vertex(5, 5, 1),
+                       Vertex(5, 6, -1),
+                       nullptr);
+    appendTriangleBulk(part3->triangles,
+                       Vertex(5, 6, -1),
+                       Vertex(5, 5, 1),
+                       Vertex(4, 4, -1),
+                       nullptr);
+    part3->buildPrimitiveViewsFromBulk();
+    parts.push_back(part3);
 
     // Fourth tree
-    std::vector<Primitive*> tris4;
-    tris4.push_back(
-      new Triangle(Vertex(9, 9, 0), Vertex(11, 9, 0), Vertex(10, 11, 0)));
-    tris4.push_back(
-      new Triangle(Vertex(9, 9, 0), Vertex(11, 9, 0), Vertex(10, 10, -3)));
-    tris4.push_back(
-      new Triangle(Vertex(11, 9, 0), Vertex(10, 10, -3), Vertex(10, 11, 0)));
-    tris4.push_back(
-      new Triangle(Vertex(10, 11, 0), Vertex(10, 10, -3), Vertex(9, 9, 0)));
-    primitives.push_back(tris4);
+    auto part4 = std::make_shared<ScenePart>();
+    part4->primitiveType = ScenePart::PrimitiveType::TRIANGLE;
+    appendTriangleBulk(part4->triangles,
+                       Vertex(9, 9, 0),
+                       Vertex(11, 9, 0),
+                       Vertex(10, 11, 0),
+                       nullptr);
+    appendTriangleBulk(part4->triangles,
+                       Vertex(9, 9, 0),
+                       Vertex(11, 9, 0),
+                       Vertex(10, 10, -3),
+                       nullptr);
+    appendTriangleBulk(part4->triangles,
+                       Vertex(11, 9, 0),
+                       Vertex(10, 10, -3),
+                       Vertex(10, 11, 0),
+                       nullptr);
+    appendTriangleBulk(part4->triangles,
+                       Vertex(10, 11, 0),
+                       Vertex(10, 10, -3),
+                       Vertex(9, 9, 0),
+                       nullptr);
+    part4->buildPrimitiveViewsFromBulk();
+    parts.push_back(part4);
   }
 
   void buildTrees()
   {
     FastSAHKDTreeFactory kdtf(32, 1, 1, 1);
-    for (auto& tris : primitives) {
+    for (auto& part : parts) {
+      std::vector<PrimitiveRef> refs;
+      part->appendPrimitiveRefs(refs);
       std::shared_ptr<LightKDTreeNode> tree(
-        kdtf.makeFromPrimitives(tris, true, false));
+        kdtf.makeFromPrimitives(refs, true, false));
       trees.push_back(std::make_shared<GroveKDTreeRaycaster>(tree));
     }
   }

@@ -63,7 +63,7 @@ protected:
    */
   virtual void GEOM_defineSplit(KDTreeNode* node,
                                 KDTreeNode* parent,
-                                std::vector<Primitive*>& primitives,
+                                std::vector<PrimitiveRef>& primitives,
                                 int const depth,
                                 int const assignedThreads) const;
   /**
@@ -77,7 +77,7 @@ protected:
     KDTreeNode* node,
     KDTreeNode* parent,
     bool const left,
-    std::vector<Primitive*> const& primitives,
+    std::vector<PrimitiveRef> const& primitives,
     int assignedThreads);
   /**
    * @brief Geometry-level parallel version of the
@@ -86,11 +86,11 @@ protected:
    *  computations
    * @see SimpleKDTreeFactory::populateSplits
    */
-  virtual void GEOM_populateSplits(std::vector<Primitive*> const& primitives,
+  virtual void GEOM_populateSplits(std::vector<PrimitiveRef> const& primitives,
                                    int const splitAxis,
                                    double const splitPos,
-                                   std::vector<Primitive*>& leftPrimitives,
-                                   std::vector<Primitive*>& rightPrimitives,
+                                   std::vector<PrimitiveRef>& leftPrimitives,
+                                   std::vector<PrimitiveRef>& rightPrimitives,
                                    int assignedThreads) const;
   /**
    * @brief Geometry-level parallel version of the
@@ -109,10 +109,10 @@ protected:
   virtual void GEOM_buildChildrenNodes(
     KDTreeNode* node,
     KDTreeNode* parent,
-    std::vector<Primitive*> const& primitives,
+    std::vector<PrimitiveRef> const& primitives,
     int const depth,
     int const index,
-    std::vector<Primitive*>& leftPrimitives,
-    std::vector<Primitive*>& rightPrimitives,
+    std::vector<PrimitiveRef>& leftPrimitives,
+    std::vector<PrimitiveRef>& rightPrimitives,
     std::shared_ptr<SharedTaskSequencer> masters);
 };

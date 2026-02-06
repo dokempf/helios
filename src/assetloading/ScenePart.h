@@ -389,6 +389,23 @@ public:
    * NOTE: This method deletes current primitives when clearExisting is true.
    */
   void buildPrimitivesFromBulk(bool const clearExisting = true);
+  /**
+   * @brief Update cached bulk values (normals, AABBs) from vertex data.
+   */
+  void updateBulk();
+  /**
+   * @brief Update cached bulk values for a single triangle.
+   */
+  void updateTriangleBulk(PrimitiveIndex index);
+  /**
+   * @brief Update cached bulk values for a single voxel.
+   */
+  void updateVoxelBulk(PrimitiveIndex index);
+
+  /**
+   * @brief Append primitive references for this scene part.
+   */
+  void appendPrimitiveRefs(std::vector<struct PrimitiveRef>& out) const;
 
   /**
    * @brief Check whether the scene part is null, according to the underlying
@@ -419,4 +436,38 @@ public:
    */
   static void computeTransformations(std::shared_ptr<ScenePart> sp,
                                      bool const holistic = false);
+};
+
+/**
+ * @brief Index-based reference to a primitive stored in a ScenePart.
+ */
+struct PrimitiveRef
+{
+  ScenePart* part = nullptr;
+  ScenePart::PrimitiveType type = ScenePart::PrimitiveType::NONE;
+  PrimitiveIndex index = 0;
+
+  PrimitiveRef() = default;
+  PrimitiveRef(ScenePart* part_,
+               ScenePart::PrimitiveType type_,
+               PrimitiveIndex index_)
+    : part(part_)
+    , type(type_)
+    , index(index_)
+  {
+  }
+
+  inline bool isValid() const
+  {
+    return part != nullptr && type != ScenePart::PrimitiveType::NONE;
+  }
+
+private:
+  friend class boost::serialization::access;
+  template<class Archive>
+  void serialize(Archive& ar, const unsigned int version)
+  {
+    ar & type;
+    ar & index;
+  }
 };

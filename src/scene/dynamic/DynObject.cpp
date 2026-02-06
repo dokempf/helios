@@ -16,11 +16,15 @@ DynObject::doStep()
 size_t
 DynObject::countVertices() const
 {
+  if (primitiveType == PrimitiveType::TRIANGLE)
+    return triangles.vertices.size();
+  if (primitiveType == PrimitiveType::VOXEL)
+    return voxels.centers.size();
+
   size_t m = 0;
-  Primitive* primitive;
-  for (size_t i = 0; i < mPrimitives.size(); ++i) {
-    primitive = mPrimitives[i];
-    m += primitive->getNumVertices();
+  for (Primitive* primitive : mPrimitives) {
+    if (primitive != nullptr)
+      m += primitive->getNumVertices();
   }
   return m;
 }
@@ -38,8 +42,22 @@ DynObject::matrixFromPrimitives(
 {
   arma::mat X(3, m);
   size_t i = 0;
-  for (size_t j = 0; j < mPrimitives.size(); ++j) {
-    Primitive* primitive = mPrimitives[j];
+  if (primitiveType == PrimitiveType::TRIANGLE) {
+    for (Vertex const& v : triangles.vertices) {
+      X.col(i++) = get(&v);
+    }
+    return X;
+  }
+  if (primitiveType == PrimitiveType::VOXEL) {
+    for (Vertex const& v : voxels.centers) {
+      X.col(i++) = get(&v);
+    }
+    return X;
+  }
+
+  for (Primitive* primitive : mPrimitives) {
+    if (primitive == nullptr)
+      continue;
     Vertex const* vertices = primitive->getVertices();
     for (size_t k = 0; k < primitive->getNumVertices(); ++k, ++i) {
       X.col(i) = get(vertices + k);
@@ -62,8 +80,22 @@ DynObject::matrixToPrimitives(
   arma::mat const& X)
 {
   size_t i = 0;
-  for (size_t j = 0; j < mPrimitives.size(); ++j) {
-    Primitive* primitive = mPrimitives[j];
+  if (primitiveType == PrimitiveType::TRIANGLE) {
+    for (Vertex& v : triangles.vertices) {
+      set(&v, X.col(i++));
+    }
+    return;
+  }
+  if (primitiveType == PrimitiveType::VOXEL) {
+    for (Vertex& v : voxels.centers) {
+      set(&v, X.col(i++));
+    }
+    return;
+  }
+
+  for (Primitive* primitive : mPrimitives) {
+    if (primitive == nullptr)
+      continue;
     Vertex* vertices = primitive->getVertices();
     for (size_t k = 0; k < primitive->getNumVertices(); ++k, ++i) {
       set(vertices + k, X.col(i));

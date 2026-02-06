@@ -1,6 +1,8 @@
 #include "KDTreeRaycaster.h"
 #include "logging.hpp"
 
+#include <scene/primitives/PrimitiveAccessor.h>
+
 std::map<double, Primitive*>
 KDTreeRaycaster::searchAll(glm::dvec3 const rayOrigin,
                            glm::dvec3 const rayDir,
@@ -52,9 +54,9 @@ KDTreeRaycaster::searchAll_recursive(LightKDTreeNode* node,
   // ######### BEGIN If node is a leaf, perform ray-primitive intersection on
   // all primitives in the leaf's bucket ###########
   if (node->splitAxis == -1) {
-    for (auto prim : *node->primitives) {
-      std::vector<double> tMinMax =
-        prim->getRayIntersection(search.rayOrigin, search.rayDir);
+    for (PrimitiveRef const& prim : *node->primitives) {
+      std::vector<double> tMinMax = PrimitiveAccessor::getRayIntersection(
+        prim, search.rayOrigin, search.rayDir);
       if (tMinMax.empty()) {
         logging::DEBUG("searchAll_recursive: tMinMax is empty");
         continue;
@@ -77,10 +79,12 @@ KDTreeRaycaster::searchAll_recursive(LightKDTreeNode* node,
 
       if (newDistance > 0 &&
           (newDistance >= tmin - epsilon && newDistance <= tmax + epsilon)) {
-        if (!search.groundOnly ||
-            (prim->material != nullptr && prim->material->isGround)) {
-          search.collectedPoints.insert(
-            std::pair<double, Primitive*>(newDistance, prim));
+        if (!search.groundOnly || PrimitiveAccessor::isGround(prim)) {
+          Primitive* view = PrimitiveAccessor::getPrimitiveView(prim);
+          if (view != nullptr) {
+            search.collectedPoints.insert(
+              std::pair<double, Primitive*>(newDistance, view));
+          }
         }
       }
     }
@@ -166,9 +170,9 @@ KDTreeRaycaster::search_recursive(LightKDTreeNode* node,
   // ######### BEGIN If node is a leaf, perform ray-primitive intersection on
   // all primitives in the leaf's bucket ###########
   if (node->splitAxis == -1) {
-    for (auto prim : *node->primitives) {
-      double const newDistance =
-        prim->getRayIntersectionDistance(search.rayOrigin, search.rayDir);
+    for (PrimitiveRef const& prim : *node->primitives) {
+      double const newDistance = PrimitiveAccessor::getRayIntersectionDistance(
+        prim, search.rayOrigin, search.rayDir);
 
       // NOTE:
       // Checking for tmin <= newDistance <= tmax here is REQUIRED
@@ -188,10 +192,12 @@ KDTreeRaycaster::search_recursive(LightKDTreeNode* node,
       // would be wrong.
       if (newDistance > 0 && newDistance < search.closestHitDistance &&
           newDistance >= tmin && newDistance <= tmax) {
-        if (!search.groundOnly ||
-            (prim->material != nullptr && prim->material->isGround)) {
-          search.closestHitDistance = newDistance;
-          hitPrim = prim;
+        if (!search.groundOnly || PrimitiveAccessor::isGround(prim)) {
+          Primitive* view = PrimitiveAccessor::getPrimitiveView(prim);
+          if (view != nullptr) {
+            search.closestHitDistance = newDistance;
+            hitPrim = view;
+          }
         }
       }
     }

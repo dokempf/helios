@@ -3,6 +3,7 @@
 #include <KDTreePrimitiveComparator.h>
 #include <SimpleKDTreeFactory.h>
 #include <logging.hpp>
+#include <scene/primitives/PrimitiveAccessor.h>
 
 // ***  CONSTRUCTION / DESTRUCTION  *** //
 // ************************************ //
@@ -20,7 +21,7 @@ SimpleKDTreeFactory::SimpleKDTreeFactory()
    */
   _buildRecursive = [&](KDTreeNode* parent,
                         bool const left,
-                        std::vector<Primitive*>& primitives,
+                        std::vector<PrimitiveRef>& primitives,
                         int const depth,
                         int const index) -> KDTreeNode* {
     return this->buildRecursive(parent, left, primitives, depth, index);
@@ -48,7 +49,7 @@ SimpleKDTreeFactory::_clone(KDTreeFactory* _kdtf) const
 // *************************************** //
 KDTreeNodeRoot*
 SimpleKDTreeFactory::makeFromPrimitivesUnsafe(
-  std::vector<Primitive*>& primitives,
+  std::vector<PrimitiveRef>& primitives,
   bool const computeStats,
   bool const reportStats)
 {
@@ -97,7 +98,7 @@ SimpleKDTreeFactory::makeFromPrimitivesUnsafe(
 KDTreeNode*
 SimpleKDTreeFactory::buildRecursive(KDTreeNode* parent,
                                     bool const left,
-                                    std::vector<Primitive*>& primitives,
+                                    std::vector<PrimitiveRef>& primitives,
                                     int const depth,
                                     int const index)
 {
@@ -110,30 +111,30 @@ SimpleKDTreeFactory::buildRecursive(KDTreeNode* parent,
     [&](KDTreeNode* node,
         KDTreeNode* parent,
         bool const left,
-        std::vector<Primitive*> const& primitives) -> void {
+        std::vector<PrimitiveRef> const& primitives) -> void {
       computeNodeBoundaries(node, parent, left, primitives);
     },
     [&](KDTreeNode* node,
         KDTreeNode* parent,
-        std::vector<Primitive*>& primitives,
+        std::vector<PrimitiveRef>& primitives,
         int const depth) -> void {
       defineSplit(node, parent, primitives, depth);
     },
-    [&](std::vector<Primitive*> const& primitives,
+    [&](std::vector<PrimitiveRef> const& primitives,
         int const splitAxis,
         double const splitPos,
-        std::vector<Primitive*>& leftPrimitives,
-        std::vector<Primitive*>& rightPrimitives) -> void {
+        std::vector<PrimitiveRef>& leftPrimitives,
+        std::vector<PrimitiveRef>& rightPrimitives) -> void {
       populateSplits(
         primitives, splitAxis, splitPos, leftPrimitives, rightPrimitives);
     },
     [&](KDTreeNode* node,
         KDTreeNode* parent,
-        std::vector<Primitive*> const& primitives,
+        std::vector<PrimitiveRef> const& primitives,
         int const depth,
         int const index,
-        std::vector<Primitive*>& leftPrimitives,
-        std::vector<Primitive*>& rightPrimitives) -> void {
+        std::vector<PrimitiveRef>& leftPrimitives,
+        std::vector<PrimitiveRef>& rightPrimitives) -> void {
       return buildChildrenNodes(node,
                                 parent,
                                 primitives,
@@ -148,31 +149,31 @@ KDTreeNode*
 SimpleKDTreeFactory::buildRecursiveRecipe(
   KDTreeNode* parent,
   bool const left,
-  std::vector<Primitive*>& primitives,
+  std::vector<PrimitiveRef>& primitives,
   int const depth,
   int const index,
   std::function<void(KDTreeNode* node,
                      KDTreeNode* parent,
                      bool const left,
-                     std::vector<Primitive*> const& primitives)>
+                     std::vector<PrimitiveRef> const& primitives)>
     f_computeNodeBoundaries,
   std::function<void(KDTreeNode* node,
                      KDTreeNode* parent,
-                     std::vector<Primitive*>& primitives,
+                     std::vector<PrimitiveRef>& primitives,
                      int const depth)> f_defineSplit,
-  std::function<void(std::vector<Primitive*> const& primitives,
+  std::function<void(std::vector<PrimitiveRef> const& primitives,
                      int const splitAxis,
                      double const splitPos,
-                     std::vector<Primitive*>& leftPrimitives,
-                     std::vector<Primitive*>& rightPrimitives)>
+                     std::vector<PrimitiveRef>& leftPrimitives,
+                     std::vector<PrimitiveRef>& rightPrimitives)>
     f_populateSplits,
   std::function<void(KDTreeNode* node,
                      KDTreeNode* parent,
-                     std::vector<Primitive*> const& primitives,
+                     std::vector<PrimitiveRef> const& primitives,
                      int const depth,
                      int const index,
-                     std::vector<Primitive*>& leftPrimitives,
-                     std::vector<Primitive*>& rightPrimitives)>
+                     std::vector<PrimitiveRef>& leftPrimitives,
+                     std::vector<PrimitiveRef>& rightPrimitives)>
     f_buildChildrenNodes)
 {
   // If there are no primitives, then KDTree will be null
@@ -191,7 +192,7 @@ SimpleKDTreeFactory::buildRecursiveRecipe(
   f_defineSplit(node, parent, primitives, depth);
 
   // Fill children's primitive lists
-  std::vector<Primitive*> leftPrimitives, rightPrimitives;
+  std::vector<PrimitiveRef> leftPrimitives, rightPrimitives;
   f_populateSplits(primitives,
                    node->splitAxis,
                    node->splitPos,
@@ -241,7 +242,7 @@ SimpleKDTreeFactory::computeKDTreeStats(KDTreeNodeRoot* root) const
 void
 SimpleKDTreeFactory::reportKDTreeStats(
   KDTreeNodeRoot* root,
-  std::vector<Primitive*> const& primitives) const
+  std::vector<PrimitiveRef> const& primitives) const
 {
   std::stringstream ss;
   ss << "KDTree (num. primitives " << primitives.size() << ") :\n\t"
@@ -258,7 +259,7 @@ SimpleKDTreeFactory::reportKDTreeStats(
 void
 SimpleKDTreeFactory::defineSplit(KDTreeNode* node,
                                  KDTreeNode* parent,
-                                 std::vector<Primitive*>& primitives,
+                                 std::vector<PrimitiveRef>& primitives,
                                  int const depth) const
 {
   // Find split axis
@@ -273,16 +274,16 @@ SimpleKDTreeFactory::defineSplit(KDTreeNode* node,
 
   // Compute split position from centroid of median primitive
   auto p = next(primitives.begin(), primitives.size() / 2);
-  node->splitPos = (*p)->getCentroid()[node->splitAxis];
+  node->splitPos = PrimitiveAccessor::getCentroid(*p)[node->splitAxis];
 }
 
 void
 SimpleKDTreeFactory::populateSplits(
-  std::vector<Primitive*> const& primitives,
+  std::vector<PrimitiveRef> const& primitives,
   int const splitAxis,
   double const splitPos,
-  std::vector<Primitive*>& leftPrimitives,
-  std::vector<Primitive*>& rightPrimitives) const
+  std::vector<PrimitiveRef>& leftPrimitives,
+  std::vector<PrimitiveRef>& rightPrimitives) const
 {
   for (auto p : primitives) {
     onPopulateSplitsDigestPrimitive(
@@ -294,11 +295,11 @@ void
 SimpleKDTreeFactory::buildChildrenNodes(
   KDTreeNode* node,
   KDTreeNode* parent,
-  std::vector<Primitive*> const& primitives,
+  std::vector<PrimitiveRef> const& primitives,
   int const depth,
   int const index,
-  std::vector<Primitive*>& leftPrimitives,
-  std::vector<Primitive*>& rightPrimitives)
+  std::vector<PrimitiveRef>& leftPrimitives,
+  std::vector<PrimitiveRef>& rightPrimitives)
 {
   // If there are primitives on both partitions, binary split the node
   if (checkNodeMustSplit(primitives, leftPrimitives, rightPrimitives)) {
@@ -325,7 +326,7 @@ SimpleKDTreeFactory::computeNodeBoundaries(
   KDTreeNode* node,
   KDTreeNode* parent,
   bool const left,
-  std::vector<Primitive*> const& primitives) const
+  std::vector<PrimitiveRef> const& primitives) const
 {
   // Find surface area and minimum and maximum positions for root node
   if (parent == nullptr) {
@@ -333,7 +334,7 @@ SimpleKDTreeFactory::computeNodeBoundaries(
     double ay = ax, az = ax;
     double bx = std::numeric_limits<double>::lowest();
     double by = bx, bz = bx;
-    for (Primitive* primitive : primitives) {
+    for (PrimitiveRef primitive : primitives) {
       onRootBoundariesDigestPrimitive(primitive, ax, ay, az, bx, by, bz);
     }
 
@@ -348,16 +349,16 @@ SimpleKDTreeFactory::computeNodeBoundaries(
 
 void
 SimpleKDTreeFactory::onPopulateSplitsDigestPrimitive(
-  Primitive* p,
+  PrimitiveRef p,
   int const splitAxis,
   double const splitPos,
-  std::vector<Primitive*>& leftPrimitives,
-  std::vector<Primitive*>& rightPrimitives) const
+  std::vector<PrimitiveRef>& leftPrimitives,
+  std::vector<PrimitiveRef>& rightPrimitives) const
 {
-  AABB const* box = p->getAABB();
-  if (box->getMin()[splitAxis] <= splitPos)
+  AABB box = PrimitiveAccessor::getAABB(p);
+  if (box.getMin()[splitAxis] <= splitPos)
     leftPrimitives.push_back(p);
-  if (box->getMax()[splitAxis] > splitPos)
+  if (box.getMax()[splitAxis] > splitPos)
     rightPrimitives.push_back(p);
 }
 
@@ -366,7 +367,7 @@ SimpleKDTreeFactory::computeMinMaxSAHForChild(
   KDTreeNode* node,
   KDTreeNode* parent,
   bool const left,
-  std::vector<Primitive*> const& primitives) const
+  std::vector<PrimitiveRef> const& primitives) const
 {
   double const a = parent->bound.getMin()[parent->splitAxis];
   double const b = parent->bound.getMax()[parent->splitAxis];
@@ -400,7 +401,7 @@ SimpleKDTreeFactory::computeMinMaxSAHForChild(
 }
 
 void
-SimpleKDTreeFactory::onRootBoundariesDigestPrimitive(Primitive* primitive,
+SimpleKDTreeFactory::onRootBoundariesDigestPrimitive(PrimitiveRef primitive,
                                                      double& ax,
                                                      double& ay,
                                                      double& az,
@@ -408,8 +409,10 @@ SimpleKDTreeFactory::onRootBoundariesDigestPrimitive(Primitive* primitive,
                                                      double& by,
                                                      double& bz) const
 {
-  Vertex* vertices = primitive->getVertices();
-  size_t const m = primitive->getNumVertices();
+  Vertex* vertices = PrimitiveAccessor::getVertices(primitive);
+  size_t const m = PrimitiveAccessor::getNumVertices(primitive);
+  if (vertices == nullptr || m == 0)
+    return;
   for (size_t i = 0; i < m; ++i) {
     Vertex* vertex = vertices + i;
     if (vertex->getX() < ax)
@@ -445,9 +448,9 @@ SimpleKDTreeFactory::onComputeNodeBoundariesCalcSAH(KDTreeNode* node,
 
 bool
 SimpleKDTreeFactory::checkNodeMustSplit(
-  std::vector<Primitive*> const& primitives,
-  std::vector<Primitive*> const& leftPrimitives,
-  std::vector<Primitive*> const& rightPrimitives) const
+  std::vector<PrimitiveRef> const& primitives,
+  std::vector<PrimitiveRef> const& leftPrimitives,
+  std::vector<PrimitiveRef> const& rightPrimitives) const
 {
   size_t const primsSize = primitives.size();
   return primsSize >= minSplitPrimitives &&
@@ -457,8 +460,8 @@ SimpleKDTreeFactory::checkNodeMustSplit(
 
 void
 SimpleKDTreeFactory::makeLeaf(KDTreeNode* node,
-                              std::vector<Primitive*> const& primitives) const
+                              std::vector<PrimitiveRef> const& primitives) const
 {
   node->splitAxis = -1;
-  node->primitives = std::make_shared<std::vector<Primitive*>>(primitives);
+  node->primitives = std::make_shared<std::vector<PrimitiveRef>>(primitives);
 }

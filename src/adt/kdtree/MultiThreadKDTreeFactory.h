@@ -169,7 +169,7 @@ public:
    * @see KDTreeFactory::makeFromPrimitivesUnsafe
    */
   KDTreeNodeRoot* makeFromPrimitivesUnsafe(
-    std::vector<Primitive*>& primitives,
+    std::vector<PrimitiveRef>& primitives,
     bool const computeStats = false,
     bool const reportStats = false) override;
 
@@ -209,7 +209,7 @@ protected:
    */
   KDTreeNode* buildRecursive(KDTreeNode* parent,
                              bool const left,
-                             std::vector<Primitive*>& primitives,
+                             std::vector<PrimitiveRef>& primitives,
                              int const depth,
                              int const index) override;
   /**
@@ -303,7 +303,7 @@ protected:
    */
   KDTreeNode* buildRecursiveGeometryLevel(KDTreeNode* parent,
                                           bool const left,
-                                          std::vector<Primitive*>& primitives,
+                                          std::vector<PrimitiveRef>& primitives,
                                           int const depth,
                                           int const index);
   /**
@@ -313,11 +313,11 @@ protected:
    */
   void buildChildrenGeometryLevel(KDTreeNode* node,
                                   KDTreeNode* parent,
-                                  std::vector<Primitive*> const& primitives,
+                                  std::vector<PrimitiveRef> const& primitives,
                                   int const depth,
                                   int const index,
-                                  std::vector<Primitive*>& leftPrimitives,
-                                  std::vector<Primitive*>& rightPrimitives,
+                                  std::vector<PrimitiveRef>& leftPrimitives,
+                                  std::vector<PrimitiveRef>& rightPrimitives,
                                   int const auxiliarThreads);
   /**
    * @brief Recursively build a KDTree for given primitives using given
@@ -343,7 +343,7 @@ protected:
    */
   KDTreeNode* buildRecursiveNodeLevel(KDTreeNode* parent,
                                       bool const left,
-                                      std::vector<Primitive*>& primitives,
+                                      std::vector<PrimitiveRef>& primitives,
                                       int const depth,
                                       int const index);
   /**
@@ -360,7 +360,7 @@ protected:
    */
   void reportKDTreeStats(
     KDTreeNodeRoot* root,
-    std::vector<Primitive*> const& primitives) const override
+    std::vector<PrimitiveRef> const& primitives) const override
   {
     kdtf->reportKDTreeStats(root, primitives);
   }

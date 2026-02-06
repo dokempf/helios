@@ -651,6 +651,112 @@ ScenePart::buildPrimitivesFromBulk(bool const clearExisting)
 }
 
 void
+ScenePart::updateTriangleBulk(PrimitiveIndex index)
+{
+  std::size_t const base = 3 * index;
+  if (base + 2 >= triangles.vertices.size())
+    return;
+
+  Vertex* verts = &triangles.vertices[base];
+  glm::dvec3 v0 = verts[0].pos;
+  glm::dvec3 e1 = verts[1].pos - v0;
+  glm::dvec3 e2 = verts[2].pos - v0;
+  glm::dvec3 normal = glm::cross(e1, e2);
+  double const len = glm::length(normal);
+  if (len > 0.0)
+    normal = normal / len;
+
+  if (index >= triangles.v0.size())
+    triangles.v0.resize(index + 1);
+  if (index >= triangles.e1.size())
+    triangles.e1.resize(index + 1);
+  if (index >= triangles.e2.size())
+    triangles.e2.resize(index + 1);
+  if (index >= triangles.face_normal.size())
+    triangles.face_normal.resize(index + 1);
+  if (index >= triangles.eps.size())
+    triangles.eps.resize(index + 1, 0.0000001);
+  if (index >= triangles.aabb_min.size())
+    triangles.aabb_min.resize(index + 1);
+  if (index >= triangles.aabb_max.size())
+    triangles.aabb_max.resize(index + 1);
+
+  triangles.v0[index] = v0;
+  triangles.e1[index] = e1;
+  triangles.e2[index] = e2;
+  triangles.face_normal[index] = normal;
+
+  double minX =
+    std::min(std::min(verts[0].getX(), verts[1].getX()), verts[2].getX());
+  double minY =
+    std::min(std::min(verts[0].getY(), verts[1].getY()), verts[2].getY());
+  double minZ =
+    std::min(std::min(verts[0].getZ(), verts[1].getZ()), verts[2].getZ());
+  double maxX =
+    std::max(std::max(verts[0].getX(), verts[1].getX()), verts[2].getX());
+  double maxY =
+    std::max(std::max(verts[0].getY(), verts[1].getY()), verts[2].getY());
+  double maxZ =
+    std::max(std::max(verts[0].getZ(), verts[1].getZ()), verts[2].getZ());
+
+  triangles.aabb_min[index] = glm::dvec3(minX, minY, minZ);
+  triangles.aabb_max[index] = glm::dvec3(maxX, maxY, maxZ);
+}
+
+void
+ScenePart::updateVoxelBulk(PrimitiveIndex index)
+{
+  if (index >= voxels.centers.size() || index >= voxels.half_size.size())
+    return;
+  if (index >= voxels.aabb_min.size())
+    voxels.aabb_min.resize(index + 1);
+  if (index >= voxels.aabb_max.size())
+    voxels.aabb_max.resize(index + 1);
+  double halfSize = voxels.half_size[index];
+  glm::dvec3 hs(halfSize, halfSize, halfSize);
+  voxels.aabb_min[index] = voxels.centers[index].pos - hs;
+  voxels.aabb_max[index] = voxels.centers[index].pos + hs;
+}
+
+void
+ScenePart::updateBulk()
+{
+  if (primitiveType == PrimitiveType::TRIANGLE) {
+    std::size_t const n = triangles.size();
+    for (PrimitiveIndex i = 0; i < n; ++i) {
+      updateTriangleBulk(i);
+    }
+  } else if (primitiveType == PrimitiveType::VOXEL) {
+    std::size_t const n = voxels.size();
+    for (PrimitiveIndex i = 0; i < n; ++i) {
+      updateVoxelBulk(i);
+    }
+  }
+}
+
+void
+ScenePart::appendPrimitiveRefs(std::vector<PrimitiveRef>& out) const
+{
+  if (primitiveType == PrimitiveType::TRIANGLE) {
+    std::size_t const n = triangles.size();
+    out.reserve(out.size() + n);
+    for (PrimitiveIndex i = 0; i < n; ++i) {
+      out.emplace_back(
+        const_cast<ScenePart*>(this), PrimitiveType::TRIANGLE, i);
+    }
+    return;
+  }
+
+  if (primitiveType == PrimitiveType::VOXEL) {
+    std::size_t const n = voxels.size();
+    out.reserve(out.size() + n);
+    for (PrimitiveIndex i = 0; i < n; ++i) {
+      out.emplace_back(const_cast<ScenePart*>(this), PrimitiveType::VOXEL, i);
+    }
+  }
+}
+
+void
 ScenePart::setPrimitives(std::vector<Primitive*> const& primitives)
 {
   for (Primitive* p : mPrimitives) {

@@ -20,12 +20,7 @@
 #include <IBinaryTreeNode.h>
 
 #include <AABB.h>
-#include <Primitive.h>
-
-// Including primitives below is necessary for serialization
-#include <DetailedVoxel.h>
-#include <Triangle.h>
-#include <Voxel.h>
+#include <assetloading/ScenePart.h>
 
 /**
  * @brief Class representing a light KDTree node. It is, the basic
@@ -46,20 +41,14 @@ private:
   template<class Archive>
   void serialize(Archive& ar, const unsigned int version)
   {
-    // Register classes derived from Primitive
-    ar.template register_type<Vertex>();
-    ar.template register_type<AABB>();
-    ar.template register_type<Triangle>();
-    ar.template register_type<Voxel>();
-    ar.template register_type<DetailedVoxel>();
-
     boost::serialization::void_cast_register<LightKDTreeNode,
                                              IBinaryTreeNode>();
     ar & left;
     ar & right;
     ar & splitPos;
     ar & splitAxis;
-    ar & primitives;
+    // NOTE: primitives are not serialized because PrimitiveRef depends on
+    // live ScenePart data that is not part of KDTree serialization.
   }
 
 public:
@@ -86,7 +75,7 @@ public:
   /**
    * @brief Vector of primitives associated with the node
    */
-  std::shared_ptr<std::vector<Primitive*>> primitives;
+  std::shared_ptr<std::vector<PrimitiveRef>> primitives;
 
   // ***  CONSTRUCTION / DESTRUCTION  *** //
   // ************************************ //

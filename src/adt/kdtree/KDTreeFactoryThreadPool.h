@@ -17,7 +17,7 @@ class KDTreeFactoryThreadPool
   : public MDThreadPool<KDTreeBuildType,
                         KDTreeNode*,
                         bool const,
-                        std::vector<Primitive*>&,
+                        std::vector<PrimitiveRef>&,
                         int const,
                         int const>
 {
@@ -32,7 +32,7 @@ public:
     : MDThreadPool<KDTreeBuildType,
                    KDTreeNode*,
                    bool const,
-                   std::vector<Primitive*>&,
+                   std::vector<PrimitiveRef>&,
                    int const,
                    int const>(_pool_size)
   {
@@ -63,7 +63,7 @@ protected:
    */
   inline void do_md_task(boost::function<void(KDTreeNode*,
                                               bool const,
-                                              std::vector<Primitive*>&,
+                                              std::vector<PrimitiveRef>&,
                                               int const,
                                               int const)>& task,
                          KDTreeBuildType* data) override

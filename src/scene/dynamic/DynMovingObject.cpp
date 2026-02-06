@@ -39,9 +39,16 @@ DynMovingObject::doSimStep()
     [=]() -> bool { return this->normalMotionQueueHasNext(); },
     [=]() -> std::shared_ptr<DynMotion> { return this->nextNormalMotion(); });
 
-  // Update primitives
-  for (Primitive* prim : mPrimitives)
-    prim->update();
+  // Update cached bulk data or primitives
+  if (primitiveType == PrimitiveType::TRIANGLE ||
+      primitiveType == PrimitiveType::VOXEL) {
+    updateBulk();
+  } else {
+    for (Primitive* prim : mPrimitives) {
+      if (prim != nullptr)
+        prim->update();
+    }
+  }
 
   // Notify observer if modified
   if (modified && kdGroveObserver != nullptr) {

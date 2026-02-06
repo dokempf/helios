@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Primitive.h"
+#include <scene/primitives/PrimitiveAccessor.h>
 
 /**
  * @brief KDTree primitive comparator
@@ -33,10 +33,10 @@ public:
    *  greater than coordinate of primitive b at the same axis, false
    *  otherwise
    */
-  bool operator()(Primitive* a, Primitive* b)
+  bool operator()(PrimitiveRef const& a, PrimitiveRef const& b)
   {
-    auto ax = a->getCentroid()[axis];
-    auto bx = b->getCentroid()[axis];
+    auto ax = PrimitiveAccessor::getCentroid(a)[axis];
+    auto bx = PrimitiveAccessor::getCentroid(b)[axis];
     if (ax > bx)
       return true;
     return false;

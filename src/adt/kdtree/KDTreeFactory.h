@@ -5,6 +5,8 @@
 #include <LightKDTreeNode.h>
 #include <LightKDTreeNodeBlockAllocator.h>
 
+#include <assetloading/ScenePart.h>
+
 #include <vector>
 
 /**
@@ -95,7 +97,7 @@ public:
    * @return Pointer to root node of built KDTree
    */
   virtual KDTreeNodeRoot* makeFromPrimitivesUnsafe(
-    std::vector<Primitive*>& primitives,
+    std::vector<PrimitiveRef>& primitives,
     bool const computeStats = false,
     bool const reportStats = false) = 0;
   /**
@@ -111,11 +113,11 @@ public:
    * @see KDTreeFactory::makeFromPrimitivesUnsafe
    */
   virtual KDTreeNodeRoot* makeFromPrimitives(
-    std::vector<Primitive*> const& primitives,
+    std::vector<PrimitiveRef> const& primitives,
     bool const computeStats = false,
     bool const reportStats = false)
   {
-    std::vector<Primitive*> prims = primitives; // Copy to work over
+    std::vector<PrimitiveRef> prims = primitives; // Copy to work over
     return makeFromPrimitivesUnsafe(prims, computeStats, reportStats);
   };
 

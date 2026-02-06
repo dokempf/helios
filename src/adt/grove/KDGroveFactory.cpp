@@ -180,11 +180,13 @@ KDGroveFactory::makeCommon(std::vector<std::shared_ptr<ScenePart>> parts,
   for (std::shared_ptr<ScenePart>& part : parts) {
     TimeWatcher tw;
     tw.start();
+    std::vector<PrimitiveRef> primRefs;
+    part->appendPrimitiveRefs(primRefs);
     std::shared_ptr<KDTreeNodeRoot> kdtree = std::shared_ptr<KDTreeNodeRoot>(
       safe ? kdtf->makeFromPrimitives(
-               part->mPrimitives, computeKDTreeStats, reportKDTreeStats)
+               primRefs, computeKDTreeStats, reportKDTreeStats)
            : kdtf->makeFromPrimitivesUnsafe(
-               part->mPrimitives, computeKDTreeStats, reportKDTreeStats));
+               primRefs, computeKDTreeStats, reportKDTreeStats));
     KDGroveSubject* subject = nullptr;
     if (part->getType() == ScenePart::ObjectType::DYN_MOVING_OBJECT) {
       subject = (DynMovingObject*)part.get();
@@ -196,7 +198,7 @@ KDGroveFactory::makeCommon(std::vector<std::shared_ptr<ScenePart>> parts,
         kdtree, std::shared_ptr<KDTreeFactory>(kdtf->clone())));
     tw.stop();
     buildingTimes.push_back(tw.getElapsedDecimalSeconds());
-    numPrimitives.push_back(part->getPrimitives().size());
+    numPrimitives.push_back(static_cast<int>(primRefs.size()));
   }
 
   // Compute and report KDGrove stats (if requested)

@@ -30,7 +30,7 @@ public:
    * @brief Primitives to build KDTree node from
    * @see SimpleKDTreeFactory::buildRecursive
    */
-  std::vector<Primitive*> primitives;
+  std::vector<PrimitiveRef> primitives;
   /**
    * @brief Depth of node
    * @see SimpleKDTreeFactory::buildRecursive
@@ -65,7 +65,7 @@ public:
    */
   KDTreeBuildType(KDTreeNode* parent,
                   bool const left,
-                  std::vector<Primitive*>& primitives,
+                  std::vector<PrimitiveRef>& primitives,
                   int const depth,
                   int const index)
     : parent(parent)

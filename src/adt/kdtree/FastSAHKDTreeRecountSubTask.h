@@ -1,9 +1,9 @@
 #pragma once
 
 #include <AABB.h>
-#include <Primitive.h>
 #include <SharedSubTask.h>
 #include <SharedTaskSequencer.h>
+#include <scene/primitives/PrimitiveAccessor.h>
 
 #include <vector>
 
@@ -28,11 +28,11 @@ protected:
   /**
    * @brief First primitive to be considered by the recount (inclusive)
    */
-  std::vector<Primitive*>::iterator beginPrimitive;
+  std::vector<PrimitiveRef>::iterator beginPrimitive;
   /**
    * @brief Last primitive to be considered by the recount (exclusive)
    */
-  std::vector<Primitive*>::iterator endPrimitive;
+  std::vector<PrimitiveRef>::iterator endPrimitive;
   /**
    * @brief How many bins use to cound
    */
@@ -57,16 +57,17 @@ public:
    * @brief Main constructor for Fast-SAH KDTree forward and backward
    *  recounts
    */
-  FastSAHKDTreeRecountSubTask(std::shared_ptr<SharedTaskSequencer> ch,
-                              int const splitAxis,
-                              double const minp,
-                              double const deltap,
-                              std::vector<Primitive*>::iterator beginPrimitive,
-                              std::vector<Primitive*>::iterator endPrimitive,
-                              std::size_t const lossNodes,
-                              std::size_t const lossCases,
-                              std::vector<std::size_t>& cForward,
-                              std::vector<std::size_t>& cBackward)
+  FastSAHKDTreeRecountSubTask(
+    std::shared_ptr<SharedTaskSequencer> ch,
+    int const splitAxis,
+    double const minp,
+    double const deltap,
+    std::vector<PrimitiveRef>::iterator beginPrimitive,
+    std::vector<PrimitiveRef>::iterator endPrimitive,
+    std::size_t const lossNodes,
+    std::size_t const lossCases,
+    std::vector<std::size_t>& cForward,
+    std::vector<std::size_t>& cBackward)
     : SharedSubTask(ch)
     , splitAxis(splitAxis)
     , minp(minp)
@@ -93,12 +94,12 @@ public:
     // Count min and max vertices
     std::vector<std::size_t> minCount(lossNodes, 0);
     std::vector<std::size_t> maxCount(lossNodes, 0);
-    for (std::vector<Primitive*>::iterator currentPrimitive = beginPrimitive;
+    for (std::vector<PrimitiveRef>::iterator currentPrimitive = beginPrimitive;
          currentPrimitive < endPrimitive;
          ++currentPrimitive) {
-      AABB* aabb = (*currentPrimitive)->getAABB();
-      double const minq = aabb->getMin()[splitAxis];
-      double const maxq = aabb->getMax()[splitAxis];
+      AABB aabb = PrimitiveAccessor::getAABB(*currentPrimitive);
+      double const minq = aabb.getMin()[splitAxis];
+      double const maxq = aabb.getMax()[splitAxis];
       ++minCount[std::min<size_t>(
         (std::size_t)((minq - minp) / deltap * lossNodes), lossNodes - 1)];
       ++maxCount[std::min<size_t>(
