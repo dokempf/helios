@@ -331,14 +331,10 @@ TEST_CASE("Rigid motion test")
     Vertex v1(1.0, -1.0, 0.0);
     Vertex v2(0.0, 1.0, 0.0);
     Vertex v3(0.0, 0.0, 1.0);
-    Triangle tr0(v0, v1, v2);
-    Triangle tr1(v0, v1, v3);
-    Triangle tr2(v0, v2, v3);
-    Triangle tr3(v1, v2, v3);
-    primitives.push_back(&tr0);
-    primitives.push_back(&tr1);
-    primitives.push_back(&tr2);
-    primitives.push_back(&tr3);
+    primitives.push_back(new Triangle(v0, v1, v2));
+    primitives.push_back(new Triangle(v0, v1, v3));
+    primitives.push_back(new Triangle(v0, v2, v3));
+    primitives.push_back(new Triangle(v1, v2, v3));
     DynMovingObject dmo("HRMTestDMO", primitives);
     dmo.computeCentroid();
 

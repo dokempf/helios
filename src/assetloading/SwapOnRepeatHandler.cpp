@@ -3,6 +3,7 @@
 #include <SwapOnRepeatHandler.h>
 #include <XYZPointCloudFileLoader.h>
 #include <scene/primitives/Primitive.h>
+#include <scene/primitives/PrimitiveViews.h>
 
 // ***  CONSTRUCTION / DESTRUCTION  *** //
 // ************************************ //
@@ -90,9 +91,6 @@ SwapOnRepeatHandler::doSwap(ScenePart& sp)
       if (dynamic_cast<XYZPointCloudFileLoader*>(filter) != nullptr) {
         holistic = true;
       }
-      // Free primitives memory from scene part
-      for (Primitive* p : sp.mPrimitives)
-        delete p;
       // The geometric swap itself
       doGeometricSwap(*genSP, sp);
       // Delete generated geometry (it will no longer be used)
@@ -102,20 +100,8 @@ SwapOnRepeatHandler::doSwap(ScenePart& sp)
     else {
       // Reload the baseline geometry on the first iteration only
       if (firstIter) {
-        // Backup primitives to prevent that baseline is updated
-        std::vector<Primitive*> primitivesBackup = baseline->mPrimitives;
-        for (size_t i = 0; i < primitivesBackup.size(); ++i) {
-          Primitive* newPrimitive = primitivesBackup[i]->clone();
-          newPrimitive->part = nullptr;
-          baseline->mPrimitives[i] = newPrimitive;
-        }
-        // Free primitives memory from scene part
-        for (Primitive* p : sp.mPrimitives)
-          delete p;
         // The geometric swap itself
         doGeometricSwap(*baseline, sp);
-        // Restore baseline to prevent any update to propagate further
-        baseline->mPrimitives = primitivesBackup;
       }
       // Remove pointer to primitives to prevent delete current ones
     }
@@ -133,9 +119,17 @@ SwapOnRepeatHandler::doSwap(ScenePart& sp)
 void
 SwapOnRepeatHandler::doGeometricSwap(ScenePart& src, ScenePart& dst)
 {
+  for (Primitive* p : dst.mPrimitives) {
+    if (!isPrimitiveView(p))
+      delete p;
+  }
+  dst.clearPrimitiveCache();
   // Assign to dst from src
   dst.primitiveType = src.primitiveType;
-  dst.mPrimitives = src.mPrimitives;
+  dst.triangles = src.triangles;
+  dst.voxels = src.voxels;
+  dst.detailed_voxels = src.detailed_voxels;
+  dst.subpartLimit = src.subpartLimit;
   dst.centroid = src.centroid;
   dst.bound = src.bound;
   dst.onRayIntersectionMode = src.onRayIntersectionMode;
@@ -144,4 +138,5 @@ SwapOnRepeatHandler::doGeometricSwap(ScenePart& src, ScenePart& dst)
   dst.ladlut = src.ladlut;
   dst.mCrs = src.mCrs;
   dst.mEnv = src.mEnv;
+  dst.buildPrimitiveViewsFromBulk();
 }

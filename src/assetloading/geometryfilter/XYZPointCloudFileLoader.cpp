@@ -1,3 +1,4 @@
+#include <assetloading/ScenePartGeometry.h>
 #include <assetloading/geometryfilter/DenseVoxelGrid.h>
 #include <assetloading/geometryfilter/SparseVoxelGrid.h>
 #include <assetloading/geometryfilter/XYZPointCloudFileLoader.h>
@@ -62,10 +63,13 @@ XYZPointCloudFileLoader::run()
       logging::ERR(ss.str());
       exit(1);
     }
-    lastNumVoxels = primsOut->mPrimitives.size();
+    primsOut->primitiveType = ScenePart::VOXEL;
+    lastNumVoxels = primsOut->voxels.size();
     parse(filePath);
-    primsOut->subpartLimit.push_back(primsOut->mPrimitives.size());
+    primsOut->subpartLimit.push_back(primsOut->voxels.size());
   }
+
+  primsOut->buildPrimitiveViewsFromBulk();
 
   // Return
   return primsOut;
@@ -120,7 +124,7 @@ XYZPointCloudFileLoader::parse(std::string const& filePath)
   // Final report
   std::stringstream ss;
   ss << "Point cloud file read successful ("
-     << primsOut->mPrimitives.size() - lastNumVoxels << " voxels)\n";
+     << primsOut->voxels.size() - lastNumVoxels << " voxels)\n";
   if (unsafeNormalEstimations > 0) {
     ss << "\t" << unsafeNormalEstimations
        << " voxels did not have enough points ("
@@ -237,11 +241,11 @@ XYZPointCloudFileLoader::loadMaterial()
     return;
 
   // Assign material to each detailed voxel
-  size_t j, n = primsOut->mPrimitives.size(), m = matvec.size();
+  size_t j, n = primsOut->voxels.size(), m = matvec.size();
   for (size_t i = 0; i < n; i++) {
-    Voxel* vxl = (Voxel*)primsOut->mPrimitives[i];
     j = i % m;
-    vxl->material = matvec[j];
+    if (i < primsOut->voxels.materials.size())
+      primsOut->voxels.materials[i] = matvec[j];
   }
 }
 
@@ -694,10 +698,21 @@ XYZPointCloudFileLoader::voxelsGridToScenePart()
 {
   voxelGrid->whileLoopStart();
   while (voxelGrid->whileLoopHasNext()) { // For each occupied voxel in grid
-    Voxel* voxel = voxelGrid->whileLoopNext();
+    size_t key = 0;
+    Voxel* voxel = voxelGrid->whileLoopNext(&key);
     // Add to primitives only if voxel has not been deleted (i.e., not null)
-    if (voxel != nullptr)
-      primsOut->mPrimitives.push_back(voxel);
+    if (voxel != nullptr) {
+      appendVoxelBulk(primsOut->voxels,
+                      voxel->v,
+                      voxel->halfSize,
+                      voxel->numPoints,
+                      voxel->r,
+                      voxel->g,
+                      voxel->b,
+                      voxel->color,
+                      voxel->material);
+      voxelGrid->deleteVoxel(key);
+    }
   }
 }
 

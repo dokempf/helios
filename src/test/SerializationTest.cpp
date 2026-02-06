@@ -7,6 +7,8 @@
 #include <Scene.h>
 #include <SerialIO.h>
 #include <cstdio>
+#include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -127,37 +129,84 @@ TEST_CASE("Serialization Test")
     t1v2.pos = glm::dvec3(0.0, 0.0, 4.0);
     t1v3.pos = glm::dvec3(2.0, 0.0, 0.0);
     Triangle t1(t1v1, t1v2, t1v3);
+    t1.material = std::make_shared<Material>();
     Voxel v1(1.0, 1.0, 1.0, 1.0);
     AABB box1(glm::dvec3(0.0, 0.0, 0.0), glm::dvec3(5.0, 5.0, 5.0));
 
-    scene1.primitives.push_back(dv1.clone());
-    scene1.primitives.push_back(t1.clone());
-    scene1.primitives.push_back(v1.clone());
-    scene1.primitives.push_back(box1.clone());
-    for (std::size_t i = 0; i < nRepeats; i++) {
-      scene1.primitives.push_back(dv1.clone());
-    }
+    std::shared_ptr<ScenePart> triPart = std::make_shared<ScenePart>();
+    std::vector<Primitive*> triPrims;
+    triPrims.push_back(t1.clone());
+    triPart->setPrimitives(triPrims);
 
-    std::shared_ptr<ScenePart> part = std::make_shared<ScenePart>();
-    for (Primitive* prim : scene1.primitives) {
-      prim->part = part;
-      part->mPrimitives.push_back(prim);
+    std::shared_ptr<ScenePart> voxelPart = std::make_shared<ScenePart>();
+    std::vector<Primitive*> voxelPrims;
+    voxelPrims.push_back(dv1.clone());
+    voxelPrims.push_back(v1.clone());
+    for (std::size_t i = 0; i < nRepeats; i++) {
+      voxelPrims.push_back(dv1.clone());
     }
+    voxelPart->setPrimitives(voxelPrims);
+
+    scene1.parts.push_back(triPart);
+    scene1.parts.push_back(voxelPart);
+    scene1.primitives.insert(scene1.primitives.end(),
+                             triPart->mPrimitives.begin(),
+                             triPart->mPrimitives.end());
+    scene1.primitives.insert(scene1.primitives.end(),
+                             voxelPart->mPrimitives.begin(),
+                             voxelPart->mPrimitives.end());
+    scene1.primitives.push_back(box1.clone());
     scene1.finalizeLoading(true);
     std::shared_ptr<KDGroveFactory> kdgf = scene1.getKDGroveFactory();
     scene1.writeObject(path);
     scene1.setKDGroveFactory(kdgf);
     Scene* scene2 = Scene::readObject(path);
-    validate(*(DetailedVoxel*)scene1.primitives[0],
-             *(DetailedVoxel*)scene2->primitives[0]);
-    validate(*(Triangle*)scene1.primitives[1],
-             *(Triangle*)scene2->primitives[1]);
-    validate(*(Voxel*)scene1.primitives[2], *(Voxel*)scene2->primitives[2]);
-    validate(*(AABB*)scene1.primitives[3], *(AABB*)scene2->primitives[3]);
+
+    size_t const triIndex = 0;
+    size_t const voxelStart = triPart->mPrimitives.size();
+    size_t const dvIndex = voxelStart;
+    size_t const vIndex = voxelStart + 1;
+    size_t const repeatStart = voxelStart + 2;
+    size_t const aabbIndex = voxelStart + voxelPart->mPrimitives.size();
+
+    std::unique_ptr<DetailedVoxel> dv1Copy(
+      dynamic_cast<DetailedVoxel*>(scene1.primitives[dvIndex]->clone()));
+    std::unique_ptr<DetailedVoxel> dv2Copy(
+      dynamic_cast<DetailedVoxel*>(scene2->primitives[dvIndex]->clone()));
+    REQUIRE(dv1Copy != nullptr);
+    REQUIRE(dv2Copy != nullptr);
+    validate(*dv1Copy, *dv2Copy);
+
+    std::unique_ptr<Triangle> t1Copy(
+      dynamic_cast<Triangle*>(scene1.primitives[triIndex]->clone()));
+    std::unique_ptr<Triangle> t2Copy(
+      dynamic_cast<Triangle*>(scene2->primitives[triIndex]->clone()));
+    REQUIRE(t1Copy != nullptr);
+    REQUIRE(t2Copy != nullptr);
+    validate(*t1Copy, *t2Copy);
+
+    std::unique_ptr<Voxel> v1Copy(
+      dynamic_cast<Voxel*>(scene1.primitives[vIndex]->clone()));
+    std::unique_ptr<Voxel> v2Copy(
+      dynamic_cast<Voxel*>(scene2->primitives[vIndex]->clone()));
+    REQUIRE(v1Copy != nullptr);
+    REQUIRE(v2Copy != nullptr);
+    validate(*v1Copy, *v2Copy);
+
+    AABB* aabb1 = dynamic_cast<AABB*>(scene1.primitives[aabbIndex]);
+    AABB* aabb2 = dynamic_cast<AABB*>(scene2->primitives[aabbIndex]);
+    REQUIRE(aabb1 != nullptr);
+    REQUIRE(aabb2 != nullptr);
+    validate(*aabb1, *aabb2);
 
     for (size_t i = 0; i < nRepeats; i++) {
-      validate(*(DetailedVoxel*)scene1.primitives[i + 4],
-               *(DetailedVoxel*)scene2->primitives[i + 4]);
+      std::unique_ptr<DetailedVoxel> dv1Repeat(dynamic_cast<DetailedVoxel*>(
+        scene1.primitives[repeatStart + i]->clone()));
+      std::unique_ptr<DetailedVoxel> dv2Repeat(dynamic_cast<DetailedVoxel*>(
+        scene2->primitives[repeatStart + i]->clone()));
+      REQUIRE(dv1Repeat != nullptr);
+      REQUIRE(dv2Repeat != nullptr);
+      validate(*dv1Repeat, *dv2Repeat);
     }
 
     delete scene2;

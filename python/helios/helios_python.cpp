@@ -25,6 +25,7 @@
 #include <scanner/ScannerSettings.h>
 #include <scanner/Trajectory.h>
 #include <scene/Scene.h>
+#include <scene/primitives/PrimitiveViews.h>
 #include <sim/comps/Leg.h>
 #include <sim/comps/Survey.h>
 
@@ -296,7 +297,15 @@ PYBIND11_MODULE(_helios, m)
       "scene_part",
       [](Primitive& prim) { return prim.part.get(); },
       [](Primitive& prim, std::shared_ptr<ScenePart> part) {
-        prim.part = part;
+        if (!part) {
+          prim.part = nullptr;
+          return;
+        }
+        if (isPrimitiveView(&prim)) {
+          prim.part = std::shared_ptr<ScenePart>(part.get(), [](ScenePart*) {});
+        } else {
+          prim.part = part;
+        }
       })
     .def_property(
       "material",
@@ -331,16 +340,22 @@ PYBIND11_MODULE(_helios, m)
            return prim.getRayIntersectionDistance(rayOrigin, rayDir);
          })
     .def("update", &Primitive::update)
-    .def(
-      "is_triangle",
-      [](Primitive& prim) { return dynamic_cast<Triangle*>(&prim) != nullptr; })
+    .def("is_triangle",
+         [](Primitive& prim) {
+           return dynamic_cast<Triangle*>(&prim) != nullptr ||
+                  dynamic_cast<TriangleView*>(&prim) != nullptr;
+         })
     .def("is_AABB",
          [](Primitive& prim) { return dynamic_cast<AABB*>(&prim) != nullptr; })
     .def("is_voxel",
-         [](Primitive& prim) { return dynamic_cast<Voxel*>(&prim) != nullptr; })
+         [](Primitive& prim) {
+           return dynamic_cast<Voxel*>(&prim) != nullptr ||
+                  dynamic_cast<VoxelView*>(&prim) != nullptr;
+         })
     .def("is_detailed_voxel",
          [](Primitive& prim) {
-           return dynamic_cast<DetailedVoxel*>(&prim) != nullptr;
+           return dynamic_cast<DetailedVoxel*>(&prim) != nullptr ||
+                  dynamic_cast<DetailedVoxelView*>(&prim) != nullptr;
          })
     .def("clone", &Primitive::clone);
 

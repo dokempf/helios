@@ -1,6 +1,6 @@
 #include "GeoTiffFileLoader.h"
-#include <Triangle.h>
 #include <Vertex.h>
+#include <assetloading/ScenePartGeometry.h>
 #include <boost/variant/get.hpp>
 #include <fstream>
 #include <logging.hpp>
@@ -37,10 +37,14 @@ GeoTiffFileLoader::run()
     fillVertices();
     buildTriangles();
     loadMaterial();
+    primsOut->primitiveType = ScenePart::TRIANGLE;
+    if (primsOut->subpartLimit.empty())
+      primsOut->subpartLimit.push_back(primsOut->triangles.size());
 
     // Finish primsOut
     primsOut->mEnv = env;
     primsOut->smoothVertexNormals();
+    primsOut->buildPrimitiveViewsFromBulk();
 
     // Release vertices
     releaseVertices();
@@ -219,9 +223,9 @@ GeoTiffFileLoader::loadMaterial()
     mat = matvec[0];
 
   // Assign material
-  for (Primitive* primitive : primsOut->mPrimitives) {
-    primitive->material = mat;
-  }
+  std::size_t const n = primsOut->triangles.size();
+  for (std::size_t i = 0; i < n; ++i)
+    primsOut->triangles.materials[i] = mat;
 }
 
 void
@@ -239,8 +243,8 @@ GeoTiffFileLoader::releaseVertices()
 void
 GeoTiffFileLoader::buildTriangles()
 {
-  Triangle *tri1, *tri2;
   Vertex *vert0, *vert1, *vert2, *vert3;
+  std::shared_ptr<Material> defaultMaterial = getMaterial("default");
   for (int x = 0; x < rasterWidth - 1; ++x) {
     for (int y = 0; y < rasterHeight - 1; ++y) {
       vert0 = vertices[x][y];
@@ -249,13 +253,13 @@ GeoTiffFileLoader::buildTriangles()
       vert3 = vertices[x + 1][y];
 
       if (vert0 != nullptr && vert1 != nullptr && vert3 != nullptr) {
-        tri1 = new Triangle(*vert0, *vert1, *vert3);
-        primsOut->mPrimitives.push_back(tri1);
+        appendTriangleBulk(
+          primsOut->triangles, *vert0, *vert1, *vert3, defaultMaterial);
       }
 
       if (vert1 != nullptr && vert2 != nullptr && vert3 != nullptr) {
-        tri2 = new Triangle(*vert1, *vert2, *vert3);
-        primsOut->mPrimitives.push_back(tri2);
+        appendTriangleBulk(
+          primsOut->triangles, *vert1, *vert2, *vert3, defaultMaterial);
       }
     }
   }

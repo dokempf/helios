@@ -50,8 +50,14 @@ Scene::Scene(Scene& s)
   }
   for (ScenePart* sp : _parts) { // Handle primitives associated with ScenePart
     std::shared_ptr<ScenePart> spc = std::make_shared<ScenePart>(*sp);
+    this->parts.push_back(spc);
+    std::shared_ptr<ScenePart> nonOwning =
+      std::shared_ptr<ScenePart>(spc.get(), [](ScenePart*) {});
     for (Primitive* p : spc->mPrimitives) {
-      p->part = spc;
+      if (isPrimitiveView(p))
+        p->part = nonOwning;
+      else
+        p->part = spc;
       this->primitives.push_back(p);
     }
   }
@@ -257,6 +263,9 @@ Scene::doForceOnGround()
     std::shared_ptr<ScenePart> part = parts[i];
     if (part->isNull())
       continue;
+    if (part->mPrimitives.empty() || part->mPrimitives[0] == nullptr ||
+        part->mPrimitives[0]->material == nullptr)
+      continue;
     if (!part->mPrimitives[0]->material->isGround)
       continue;
     I.push_back(i);              // Store index of found ground part
@@ -286,6 +295,13 @@ Scene::doForceOnGround()
     }
     // 2. Find minimum z vertex and pick first ground reference
     std::vector<Vertex*> vertices = part->getAllVertices();
+    if (vertices.empty()) {
+      std::stringstream ss;
+      ss << "Scene::doForceOnGround skipped part \"" << part->mId << "\"\n"
+         << "No vertices were available to place the part on ground";
+      logging::WARN(ss.str());
+      continue;
+    }
     glm::dvec3 minzv = vertices[0]->pos; // First vertex as minz candidate
     std::size_t const n = vertices.size();
     for (std::size_t i = 1; i < n; ++i) { // Find best minz candidate
@@ -319,6 +335,14 @@ Scene::doForceOnGround()
     // 3. Find ground reference best fitting plane
     if (planes[groundLocalIndex] == nullptr) { // Estimate plane if needed
       std::vector<Vertex*> groundVertices = groundPart->getAllVertices();
+      if (groundVertices.empty()) {
+        std::stringstream ss;
+        ss << "Scene::doForceOnGround could not place part \"" << part->mId
+           << "\" on ground.\n"
+           << "Ground candidate \"" << groundPart->mId << "\" has no vertices";
+        logging::WARN(ss.str());
+        continue;
+      }
       std::size_t const ngv = groundVertices.size();
       std::size_t const ngv2 = 2 * ngv;
       arma::mat groundVerticesMatrix(ngv, 3);

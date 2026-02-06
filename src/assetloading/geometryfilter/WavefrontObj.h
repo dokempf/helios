@@ -4,10 +4,7 @@
 
 #pragma once
 
-#include <vector>
-
-// Forward declaration
-class Primitive;
+#include <assetloading/ScenePartGeometry.h>
 
 /**
  * @brief Class representing a .obj loaded file
@@ -16,10 +13,10 @@ class WavefrontObj
 {
 public:
   /**
-   * @brief Vector containing pointers to the primitives of the obj
+   * @brief Bulk triangle data for the loaded OBJ.
    */
-  std::vector<Primitive*> primitives{};
+  TriangleBulk triangles{};
 
   WavefrontObj() = default;
-  ~WavefrontObj();
+  ~WavefrontObj() = default;
 };

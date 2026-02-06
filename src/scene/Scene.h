@@ -14,6 +14,7 @@
 #include <Triangle.h>
 #include <Vertex.h>
 #include <Voxel.h>
+#include <scene/primitives/PrimitiveViews.h>
 
 #include <KDGrove.h>
 #include <KDGroveFactory.h>
@@ -56,7 +57,13 @@ private:
     // ar &kdgrove; // KDGrove not saved because trees might be too deep
     ar & bbox;
     ar & bbox_crs;
-    ar & primitives;
+    std::vector<Primitive*> standalonePrimitives;
+    standalonePrimitives.reserve(primitives.size());
+    for (Primitive* p : primitives) {
+      if (p->part == nullptr && !isPrimitiveView(p))
+        standalonePrimitives.push_back(p);
+    }
+    ar & standalonePrimitives;
     ar & parts;
   }
   /**
@@ -83,8 +90,19 @@ private:
     // ar &kdgrove; // KDTree not loaded because it might be too deep
     ar & bbox;
     ar & bbox_crs;
-    ar & primitives;
+    std::vector<Primitive*> standalonePrimitives;
+    ar & standalonePrimitives;
     ar & parts;
+
+    primitives.clear();
+    for (std::shared_ptr<ScenePart>& part : parts) {
+      part->buildPrimitiveViewsFromBulk();
+      primitives.insert(
+        primitives.end(), part->mPrimitives.begin(), part->mPrimitives.end());
+    }
+    primitives.insert(primitives.end(),
+                      standalonePrimitives.begin(),
+                      standalonePrimitives.end());
 
     // Build KDTree from primitives
     if (kdgf != nullptr)
@@ -161,8 +179,10 @@ public:
   }
   ~Scene() override
   {
-    for (Primitive* p : primitives)
-      delete p;
+    for (Primitive* p : primitives) {
+      if (!isPrimitiveView(p))
+        delete p;
+    }
   }
   Scene(Scene& s);
 

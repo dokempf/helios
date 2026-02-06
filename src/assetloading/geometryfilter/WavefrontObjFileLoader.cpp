@@ -86,7 +86,7 @@ WavefrontObjFileLoader::run()
       // primsOut->addObj(cache.get(pathString));
       // TODO Remove addObj below
       primsOut->addObj(loadedObj);
-      primsOut->subpartLimit.push_back(primsOut->mPrimitives.size());
+      primsOut->subpartLimit.push_back(primsOut->triangles.size());
     }
 
     delete loadedObj;
@@ -104,11 +104,13 @@ WavefrontObjFileLoader::run()
 
   // Report
   std::stringstream ss;
-  ss << "# total primitives loaded: " << primsOut->mPrimitives.size();
+  ss << "# total primitives loaded: " << primsOut->triangles.size();
   logging::DEBUG(ss.str());
 
-  // Return
+  // Build primitive views
+  primsOut->buildPrimitiveViewsFromBulk();
 
+  // Return
   return primsOut;
 }
 
@@ -223,23 +225,25 @@ WavefrontObjFileLoader::readPrimitive(WavefrontObj* loadedObj,
 
     // Read a triangle:
     if (lineParts.size() == 4) {
-      Triangle* tri = new Triangle(verts[0], verts[1], verts[2]);
-      tri->material = getMaterial(currentMat);
-      //      primsOut->mPrimitives.push_back(tri);
-      loadedObj->primitives.push_back(tri);
+      appendTriangleBulk(loadedObj->triangles,
+                         verts[0],
+                         verts[1],
+                         verts[2],
+                         getMaterial(currentMat));
     }
 
     // Read a quad (two triangles):
     else if (lineParts.size() == 5) {
-      Triangle* tri1 = new Triangle(verts[0], verts[1], verts[2]);
-      tri1->material = getMaterial(currentMat);
-      //      primsOut->mPrimitives.push_back(tri1);
-      loadedObj->primitives.push_back(tri1);
-
-      Triangle* tri2 = new Triangle(verts[0], verts[2], verts[3]);
-      tri2->material = getMaterial(currentMat);
-      //      primsOut->mPrimitives.push_back(tri2);
-      loadedObj->primitives.push_back(tri2);
+      appendTriangleBulk(loadedObj->triangles,
+                         verts[0],
+                         verts[1],
+                         verts[2],
+                         getMaterial(currentMat));
+      appendTriangleBulk(loadedObj->triangles,
+                         verts[0],
+                         verts[2],
+                         verts[3],
+                         getMaterial(currentMat));
     }
   } else {
     ss << "Unsupported primitive!";

@@ -3,6 +3,7 @@
 #include <FileUtils.h>
 #include <LadLutLoader.h>
 #include <assetloading/MaterialsFileReader.h>
+#include <assetloading/ScenePartGeometry.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/filesystem.hpp>
 #include <noise/UniformNoiseSource.h>
@@ -43,7 +44,7 @@ DetailedVoxelLoader::run()
   // Load DV files
   for (std::string const& pathString : filePaths) {
     loadDv(pathString, transmittiveMode);
-    primsOut->subpartLimit.push_back(primsOut->mPrimitives.size());
+    primsOut->subpartLimit.push_back(primsOut->voxels.size());
   }
 
   // Load material if any
@@ -51,6 +52,9 @@ DetailedVoxelLoader::run()
 
   // Load ladlut if any
   loadLadlut();
+
+  // Build primitive views
+  primsOut->buildPrimitiveViewsFromBulk();
 
   // Return detailed voxels as ScenePart *
   return primsOut;
@@ -91,6 +95,9 @@ DetailedVoxelLoader::loadDv(std::string const& pathString,
 
   // Prepare detailed voxels
   for (DetailedVoxel* dv : dvs) {
+    if (dv == nullptr)
+      continue;
+    primsOut->primitiveType = ScenePart::VOXEL;
     dv->material = std::make_shared<Material>(mat);
     for (size_t i = 0; i < dv->getNumVertices(); i++) {
       Color4f& color = dv->getVertices()[i].color;
@@ -99,7 +106,32 @@ DetailedVoxelLoader::loadDv(std::string const& pathString,
       color.z = 0.5;
       color.w = 0.5;
     }
-    primsOut->mPrimitives.push_back(dv);
+
+    appendVoxelBulk(primsOut->voxels,
+                    dv->v,
+                    dv->halfSize,
+                    dv->numPoints,
+                    dv->r,
+                    dv->g,
+                    dv->b,
+                    dv->color,
+                    dv->material);
+
+    primsOut->detailed_voxels.present.push_back(1);
+    std::vector<int> int_values;
+    int_values.reserve(dv->getNumberOfIntValues());
+    for (std::size_t i = 0; i < dv->getNumberOfIntValues(); ++i)
+      int_values.push_back(dv->getIntValue(i));
+    primsOut->detailed_voxels.int_values.push_back(std::move(int_values));
+
+    std::vector<double> double_values;
+    double_values.reserve(dv->getNumberOfDoubleValues());
+    for (std::size_t i = 0; i < dv->getNumberOfDoubleValues(); ++i)
+      double_values.push_back(dv->getDoubleValue(i));
+    primsOut->detailed_voxels.double_values.push_back(std::move(double_values));
+    primsOut->detailed_voxels.max_pad.push_back(dv->getMaxPad());
+
+    delete dv;
   }
 }
 
@@ -112,11 +144,11 @@ DetailedVoxelLoader::loadMaterial()
     return;
 
   // Assign material to each detailed voxel
-  size_t j, n = primsOut->mPrimitives.size(), m = matvec.size();
+  size_t j, n = primsOut->voxels.size(), m = matvec.size();
   for (size_t i = 0; i < n; i++) {
-    DetailedVoxel* dv = (DetailedVoxel*)primsOut->mPrimitives[i];
     j = i % m;
-    dv->material = matvec[j];
+    if (i < primsOut->voxels.materials.size())
+      primsOut->voxels.materials[i] = matvec[j];
   }
 }
 

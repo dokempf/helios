@@ -6,6 +6,7 @@
 #include <rigidmotion/RigidMotionR3Factory.h>
 #include <scene/dynamic/DynMovingObject.h>
 #include <scene/dynamic/DynObject.h>
+#include <scene/primitives/PrimitiveViews.h>
 #include <visualhelios/VHSimpleCanvas.h>
 
 using namespace std::chrono_literals;
@@ -114,20 +115,30 @@ SimplePrimitivesDemo::run()
 
   // Destroy primitives
   vector<Primitive*> primitives = mobileStructure->getPrimitives();
-  for (Primitive* primitive : primitives)
-    delete primitive;
+  for (Primitive* primitive : primitives) {
+    if (!isPrimitiveView(primitive))
+      delete primitive;
+  }
   primitives = fixedStructure->getPrimitives();
-  for (Primitive* primitive : primitives)
-    delete primitive;
+  for (Primitive* primitive : primitives) {
+    if (!isPrimitiveView(primitive))
+      delete primitive;
+  }
   primitives = helicalStructure->getPrimitives();
-  for (Primitive* primitive : primitives)
-    delete primitive;
+  for (Primitive* primitive : primitives) {
+    if (!isPrimitiveView(primitive))
+      delete primitive;
+  }
   primitives = staticStructure->getPrimitives();
-  for (Primitive* primitive : primitives)
-    delete primitive;
+  for (Primitive* primitive : primitives) {
+    if (!isPrimitiveView(primitive))
+      delete primitive;
+  }
   primitives = groundStructure->getPrimitives();
-  for (Primitive* primitive : primitives)
-    delete primitive;
+  for (Primitive* primitive : primitives) {
+    if (!isPrimitiveView(primitive))
+      delete primitive;
+  }
 
   std::cout << "FINISHED SIMPLE PRIMITIVES DEMO!" << std::endl;
 }

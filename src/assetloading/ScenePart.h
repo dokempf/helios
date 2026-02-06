@@ -4,6 +4,7 @@
 class Primitive;
 class AABB;
 class WavefrontObj;
+struct ScenePartPrimitiveCache;
 
 #include <LadLut.h>
 #include <Vertex.h>
@@ -34,7 +35,10 @@ class ScenePart
   template<class Archive>
   void serialize(Archive& ar, const unsigned int version)
   {
-    ar & mPrimitives;
+    ar & primitiveType;
+    ar & triangles;
+    ar & voxels;
+    ar & detailed_voxels;
     ar & centroid;
     ar & bound;
     ar & mId;
@@ -96,6 +100,10 @@ public:
    * @brief Vector of pointers to primitives used by this scene part
    */
   std::vector<Primitive*> mPrimitives;
+  /**
+   * @brief Cache of non-owning primitive views built from bulk data.
+   */
+  std::unique_ptr<ScenePartPrimitiveCache> primitiveCache;
   /**
    * @brief The centroid of the scene part
    */
@@ -200,12 +208,9 @@ public:
    *  the copy will have the source as their reference scene part. Use this
    *  mode (true) with caution.
    */
-  ScenePart()
-    : primitiveType(PrimitiveType::NONE)
-  {
-  }
+  ScenePart();
   ScenePart(ScenePart const& sp, bool const shallowPrimitives = false);
-  virtual ~ScenePart() {}
+  virtual ~ScenePart();
 
   // ***  COPY / MOVE OPERATORS  *** //
   // ******************************* //
@@ -235,11 +240,11 @@ public:
 
   /**
    * @brief Split each subpart into a different scene part, with the first
-   *  one corresponding to this scene part
+   *  one corresponding to this scene part.
    * @see subpartLimit
-   * @return True when split was successfully performed, false otherwise
+   * @return Vector of newly created scene parts (empty if no split)
    */
-  bool splitSubparts();
+  std::vector<std::shared_ptr<ScenePart>> splitSubparts();
 
   /**
    * @brief Compute the default centroid for the scene part as the midrange
@@ -317,10 +322,7 @@ public:
    * @param primitives Scene part primitives
    * @see ScenePart::mPrimitives
    */
-  inline void setPrimitives(std::vector<Primitive*> const& primitives)
-  {
-    this->mPrimitives = primitives;
-  }
+  void setPrimitives(std::vector<Primitive*> const& primitives);
   /**
    * @brief Obtain the centroid of the scene part
    * @return Scene part centroid
@@ -363,6 +365,15 @@ public:
   {
     return sorh;
   }
+
+  /**
+   * @brief Clear the primitive views cache and pointers.
+   */
+  void clearPrimitiveCache();
+  /**
+   * @brief Build primitive views from current bulk data.
+   */
+  void buildPrimitiveViewsFromBulk();
 
   /**
    * @brief Clear all bulk geometry containers.

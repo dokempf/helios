@@ -1,6 +1,7 @@
 #include <assetloading/ScenePart.h>
 #include <filems/factory/FMSFacadeFactory.h>
 #include <scene/Scene.h>
+#include <scene/primitives/PrimitiveViews.h>
 #include <sim/comps/SimulationPlayer.h>
 #include <sim/core/Simulation.h>
 #include <sim/core/SurveyPlayback.h>
@@ -185,10 +186,14 @@ SimulationPlayer::restartScene(Scene& scene, bool const keepCRS)
     // Handle scene parts that need to be discarded
     if (sp->sorh != nullptr && sp->sorh->needsDiscardOnReplay() &&
         !sp->isNull()) {
-      for (Primitive* p : sp->sorh->getBaselinePrimitives())
-        delete p;
-      for (Primitive* p : sp->mPrimitives)
-        delete p;
+      for (Primitive* p : sp->sorh->getBaselinePrimitives()) {
+        if (!isPrimitiveView(p))
+          delete p;
+      }
+      for (Primitive* p : sp->mPrimitives) {
+        if (!isPrimitiveView(p))
+          delete p;
+      }
       if (sp->sorh->hasNoFuture())
         sp->sorh = nullptr;
       else {

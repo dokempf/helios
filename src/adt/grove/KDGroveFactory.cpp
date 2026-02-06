@@ -236,23 +236,60 @@ KDGroveFactory::makeMergeNonMoving(
 {
   // Prepare merged non moving scene parts
   std::vector<std::shared_ptr<ScenePart>> parts;
-  std::vector<Primitive*> mergedPrimitives;
+  std::vector<Primitive*> mergedTriangles;
+  std::vector<Primitive*> mergedVoxels;
   for (std::shared_ptr<ScenePart> part : _parts) {
     // Consider moving objects directly
     if (part->getType() == ScenePart::ObjectType::DYN_MOVING_OBJECT) {
       parts.push_back(part);
       continue;
     }
-    // Extract primitives from non moving objects
+
     std::vector<Primitive*> const& partPrimitives = part->getPrimitives();
-    mergedPrimitives.insert(
-      mergedPrimitives.end(), partPrimitives.cbegin(), partPrimitives.cend());
+    if (partPrimitives.empty()) {
+      parts.push_back(part);
+      continue;
+    }
+
+    // Extract primitives from non moving objects.
+    // Use clones to avoid invalidating primitives owned by the original parts.
+    if (part->primitiveType == ScenePart::PrimitiveType::TRIANGLE) {
+      for (Primitive* primitive : partPrimitives) {
+        if (primitive == nullptr)
+          continue;
+        Primitive* clone = primitive->clone();
+        if (clone != nullptr)
+          mergedTriangles.push_back(clone);
+      }
+      continue;
+    }
+
+    if (part->primitiveType == ScenePart::PrimitiveType::VOXEL) {
+      for (Primitive* primitive : partPrimitives) {
+        if (primitive == nullptr)
+          continue;
+        Primitive* clone = primitive->clone();
+        if (clone != nullptr)
+          mergedVoxels.push_back(clone);
+      }
+      continue;
+    }
+
+    // Fallback: keep part as-is when primitive type is unknown.
+    parts.push_back(part);
   }
 
   // Insert merged scene part, if any
-  if (mergedPrimitives.size() > 0) {
+  if (!mergedTriangles.empty()) {
     std::shared_ptr<ScenePart> mergedPart = std::make_shared<ScenePart>();
-    mergedPart->setPrimitives(mergedPrimitives);
+    mergedPart->primitiveType = ScenePart::PrimitiveType::TRIANGLE;
+    mergedPart->setPrimitives(mergedTriangles);
+    parts.push_back(mergedPart);
+  }
+  if (!mergedVoxels.empty()) {
+    std::shared_ptr<ScenePart> mergedPart = std::make_shared<ScenePart>();
+    mergedPart->primitiveType = ScenePart::PrimitiveType::VOXEL;
+    mergedPart->setPrimitives(mergedVoxels);
     parts.push_back(mergedPart);
   }
 

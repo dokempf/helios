@@ -6,6 +6,7 @@
 #include <SpectralLibrary.h>
 #include <WavefrontObjFileLoader.h>
 #include <XYZPointCloudFileLoader.h>
+#include <scene/primitives/PrimitiveViews.h>
 
 #include <fluxionum/DiffDesignMatrixInterpolator.h>
 #include <fluxionum/ParametricLinearPiecesFunction.h>
@@ -103,8 +104,14 @@ readObjScenePart(std::string filePath,
   std::shared_ptr<ScenePart> sp(loader.run());
 
   // Connect all primitives to their scene part
-  for (auto p : sp->mPrimitives)
-    p->part = sp;
+  std::shared_ptr<ScenePart> nonOwning =
+    std::shared_ptr<ScenePart>(sp.get(), [](ScenePart*) {});
+  for (auto p : sp->mPrimitives) {
+    if (isPrimitiveView(p))
+      p->part = nonOwning;
+    else
+      p->part = sp;
+  }
 
   // Object lifetime caveat! Settings primsOut to nullptr will prevent the
   // loader destructor from deleting the primitives.
@@ -122,8 +129,14 @@ readTiffScenePart(std::string filePath)
   std::shared_ptr<ScenePart> sp(loader.run());
 
   // Connect all primitives to their scene part
-  for (auto p : sp->mPrimitives)
-    p->part = sp;
+  std::shared_ptr<ScenePart> nonOwning =
+    std::shared_ptr<ScenePart>(sp.get(), [](ScenePart*) {});
+  for (auto p : sp->mPrimitives) {
+    if (isPrimitiveView(p))
+      p->part = nonOwning;
+    else
+      p->part = sp;
+  }
 
   // Object lifetime caveat! Settings primsOut to nullptr will prevent the
   // loader destructor from deleting the primitives.
@@ -187,8 +200,14 @@ readXYZScenePart(std::string filePath,
   loader.setAssetsDir(assetsPath);
 
   std::shared_ptr<ScenePart> sp(loader.run());
-  for (auto p : sp->mPrimitives)
-    p->part = sp;
+  std::shared_ptr<ScenePart> nonOwning =
+    std::shared_ptr<ScenePart>(sp.get(), [](ScenePart*) {});
+  for (auto p : sp->mPrimitives) {
+    if (isPrimitiveView(p))
+      p->part = nonOwning;
+    else
+      p->part = sp;
+  }
 
   // Object lifetime caveat! Settings primsOut to nullptr will prevent the
   // loader destructor from deleting the primitives.
@@ -222,8 +241,14 @@ readVoxScenePart(std::string filePath,
   loader.setAssetsDir(assetsPath);
   std::shared_ptr<ScenePart> sp(loader.run());
 
-  for (auto p : sp->mPrimitives)
-    p->part = sp;
+  std::shared_ptr<ScenePart> nonOwning =
+    std::shared_ptr<ScenePart>(sp.get(), [](ScenePart*) {});
+  for (auto p : sp->mPrimitives) {
+    if (isPrimitiveView(p))
+      p->part = nonOwning;
+    else
+      p->part = sp;
+  }
 
   loader.primsOut = nullptr;
 
@@ -456,9 +481,14 @@ addScenePartToScene(std::shared_ptr<StaticScene> scene,
       scene->primitives.end(), sp->mPrimitives.begin(), sp->mPrimitives.end());
   }
   // Add the new scene part
+  std::shared_ptr<ScenePart> nonOwning =
+    std::shared_ptr<ScenePart>(scenePart.get(), [](ScenePart*) {});
   for (Primitive* primitive : scenePart->mPrimitives) {
     if (primitive->part == nullptr) {
-      primitive->part = scenePart;
+      if (isPrimitiveView(primitive))
+        primitive->part = nonOwning;
+      else
+        primitive->part = scenePart;
     }
   }
   scene->appendStaticObject(scenePart);

@@ -8,6 +8,7 @@
 #include <XmlSceneLoader.h>
 #include <XmlUtils.h>
 #include <scene/dynamic/DynScene.h>
+#include <scene/primitives/PrimitiveViews.h>
 
 #include <logging.hpp>
 
@@ -295,8 +296,14 @@ XmlSceneLoader::validateScenePart(std::shared_ptr<ScenePart> scenePart,
                                   tinyxml2::XMLElement* scenePartNode)
 {
   // If the scene part is not valid ...
+  bool hasBulk = false;
+  if (scenePart->primitiveType == ScenePart::PrimitiveType::TRIANGLE) {
+    hasBulk = !scenePart->triangles.vertices.empty();
+  } else if (scenePart->primitiveType == ScenePart::PrimitiveType::VOXEL) {
+    hasBulk = !scenePart->voxels.centers.empty();
+  }
   if (scenePart->getPrimitiveType() == ScenePart::PrimitiveType::NONE &&
-      scenePart->mPrimitives.empty()) {
+      scenePart->mPrimitives.empty() && !hasBulk) {
     // Obtain the path
     std::string path = "#NULL#";
     std::string pathType = "path";
@@ -344,32 +351,58 @@ XmlSceneLoader::digestScenePart(std::shared_ptr<ScenePart>& scenePart,
                                 bool dynObject,
                                 int& partIndex)
 {
+  if (scenePart->primitiveType == ScenePart::PrimitiveType::NONE) {
+    if (!scenePart->triangles.vertices.empty())
+      scenePart->primitiveType = ScenePart::PrimitiveType::TRIANGLE;
+    else if (!scenePart->voxels.centers.empty())
+      scenePart->primitiveType = ScenePart::PrimitiveType::VOXEL;
+  }
+  if (scenePart->mPrimitives.empty()) {
+    bool hasBulk = false;
+    if (scenePart->primitiveType == ScenePart::PrimitiveType::TRIANGLE) {
+      hasBulk = !scenePart->triangles.vertices.empty();
+    } else if (scenePart->primitiveType == ScenePart::PrimitiveType::VOXEL) {
+      hasBulk = !scenePart->voxels.centers.empty();
+    }
+    if (hasBulk)
+      scenePart->buildPrimitiveViewsFromBulk();
+  }
+
   // For all primitives, set reference to their scene part and transform:
   ScenePart::computeTransformations(scenePart, holistic);
 
-  // Append as static object if it is not dynamic
-  // If it is dynamic, it must have been appended before
-  if (!dynObject)
-    scene->appendStaticObject(scenePart);
-
-  // Add scene part primitives to the scene
-  scene->primitives.insert(scene->primitives.end(),
-                           scenePart->mPrimitives.begin(),
-                           scenePart->mPrimitives.end());
-
-  // Split subparts into different scene parts
+  std::vector<std::shared_ptr<ScenePart>> partsToAdd;
   if (splitPart) {
-    size_t partIndexOffset = scenePart->subpartLimit.size() - 1;
-    if (scenePart->splitSubparts())
-      partIndex += partIndexOffset;
+    std::vector<std::shared_ptr<ScenePart>> newParts =
+      scenePart->splitSubparts();
+    partsToAdd.push_back(scenePart);
+    partsToAdd.insert(partsToAdd.end(), newParts.begin(), newParts.end());
+    partIndex += static_cast<int>(newParts.size());
+  } else {
+    partsToAdd.push_back(scenePart);
   }
 
-  // Infer type of primitive for the scene part
-  size_t const numVertices = scenePart->mPrimitives[0]->getNumVertices();
-  if (numVertices == 3)
-    scenePart->primitiveType = ScenePart::TRIANGLE;
-  else
-    scenePart->primitiveType = ScenePart::VOXEL;
+  for (std::shared_ptr<ScenePart>& part : partsToAdd) {
+    // Append as static object if it is not dynamic
+    // If it is dynamic, it must have been appended before
+    if (!dynObject)
+      scene->appendStaticObject(part);
+
+    // Add scene part primitives to the scene
+    scene->primitives.insert(scene->primitives.end(),
+                             part->mPrimitives.begin(),
+                             part->mPrimitives.end());
+
+    // Infer type of primitive for the scene part
+    if (part->primitiveType == ScenePart::PrimitiveType::NONE &&
+        !part->mPrimitives.empty()) {
+      size_t const numVertices = part->mPrimitives[0]->getNumVertices();
+      if (numVertices == 3)
+        part->primitiveType = ScenePart::TRIANGLE;
+      else
+        part->primitiveType = ScenePart::VOXEL;
+    }
+  }
 }
 
 std::shared_ptr<KDTreeFactory>
@@ -475,8 +508,13 @@ XmlSceneLoader::loadDynMotions(tinyxml2::XMLElement* scenePartNode,
   }
 
   // Update scene part for each primitive so it is the new DMO
+  std::shared_ptr<ScenePart> nonOwning =
+    std::shared_ptr<ScenePart>(dsmo.get(), [](ScenePart*) {});
   for (Primitive* primitive : dsmo->mPrimitives) {
-    primitive->part = dsmo;
+    if (isPrimitiveView(primitive))
+      primitive->part = nonOwning;
+    else
+      primitive->part = dsmo;
   }
 
   // Use scene part ID to build dynamic sequentiable moving object ID

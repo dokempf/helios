@@ -17,7 +17,6 @@ target_sources(
   "geometryfilter/DetailedVoxelLoader.cpp"
   "geometryfilter/DenseVoxelGrid.cpp"
   "geometryfilter/SparseVoxelGrid.cpp"
-  "geometryfilter/WavefrontObj.cpp"
   "geometryfilter/XYZPointCloudFileLoader.cpp"
   "geometryfilter/AbstractGeometryFilter.cpp"
   "geometryfilter/WavefrontObjCache.cpp"

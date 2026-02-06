@@ -10,12 +10,18 @@
 #include <Triangle.h>
 #include <Voxel.h>
 #include <WavefrontObj.h>
+#include <scene/primitives/PrimitiveViews.h>
 #include <util/logger/logging.hpp>
 
 #include <glm/glm.hpp>
 
 // ***  CONSTRUCTION / DESTRUCTION  *** //
 // ************************************ //
+ScenePart::ScenePart()
+  : primitiveType(PrimitiveType::NONE)
+{
+}
+
 ScenePart::ScenePart(ScenePart const& sp, bool const shallowPrimitives)
 {
   this->centroid = sp.centroid;
@@ -32,26 +38,23 @@ ScenePart::ScenePart(ScenePart const& sp, bool const shallowPrimitives)
   this->mEnv = nullptr; // TODO Copy this too
 
   this->primitiveType = sp.primitiveType;
-  this->triangles = sp.triangles;
-  this->voxels = sp.voxels;
-  this->detailed_voxels = sp.detailed_voxels;
-  this->mPrimitives = std::vector<Primitive*>(0);
-  Primitive* p;
-
-  if (shallowPrimitives) {
-    for (size_t i = 0; i < sp.mPrimitives.size(); ++i) {
-      this->mPrimitives.push_back(sp.mPrimitives[i]);
-    }
+  if (sp.triangles.size() == 0 && sp.voxels.size() == 0 &&
+      !sp.mPrimitives.empty()) {
+    this->mPrimitives = sp.mPrimitives;
+    buildBulkFromPrimitives();
+    this->mPrimitives.clear();
   } else {
-    for (size_t i = 0; i < sp.mPrimitives.size(); ++i) {
-      p = sp.mPrimitives[i]->clone();
-      p->part = sp.mPrimitives[i]->part;
-      this->mPrimitives.push_back(p);
-    }
+    this->triangles = sp.triangles;
+    this->voxels = sp.voxels;
+    this->detailed_voxels = sp.detailed_voxels;
   }
+  clearPrimitiveCache();
+  buildPrimitiveViewsFromBulk();
 
   this->subpartLimit = sp.subpartLimit;
 }
+
+ScenePart::~ScenePart() = default;
 
 // ***  COPY / MOVE OPERATORS  *** //
 // ******************************* //
@@ -72,16 +75,18 @@ ScenePart::operator=(const ScenePart& rhs)
   this->mEnv = nullptr; // TODO Copy this too
 
   this->primitiveType = rhs.primitiveType;
-  this->triangles = rhs.triangles;
-  this->voxels = rhs.voxels;
-  this->detailed_voxels = rhs.detailed_voxels;
-  this->mPrimitives = std::vector<Primitive*>(0);
-  Primitive* p;
-  for (size_t i = 0; i < rhs.mPrimitives.size(); i++) {
-    p = rhs.mPrimitives[i]->clone();
-    p->part = rhs.mPrimitives[i]->part;
-    this->mPrimitives.push_back(p);
+  if (rhs.triangles.size() == 0 && rhs.voxels.size() == 0 &&
+      !rhs.mPrimitives.empty()) {
+    this->mPrimitives = rhs.mPrimitives;
+    buildBulkFromPrimitives();
+    this->mPrimitives.clear();
+  } else {
+    this->triangles = rhs.triangles;
+    this->voxels = rhs.voxels;
+    this->detailed_voxels = rhs.detailed_voxels;
   }
+  clearPrimitiveCache();
+  buildPrimitiveViewsFromBulk();
 
   this->subpartLimit = rhs.subpartLimit;
 
@@ -98,15 +103,37 @@ ScenePart::addObj(WavefrontObj* obj)
   ss << "Adding primitive to Scenepart ...";
   logging::DEBUG(ss.str());
   ss.str("");
-  size_t oldNumPrimitives = mPrimitives.size();
+  if (obj == nullptr)
+    return;
 
-  Primitive* p;
-  for (size_t i = 0; i < obj->primitives.size(); i++) {
-    p = obj->primitives[i]->clone();
-    mPrimitives.push_back(p);
-  }
+  primitiveType = PrimitiveType::TRIANGLE;
+  size_t oldNumTriangles = triangles.size();
 
-  ss << "# new primitives added: " << mPrimitives.size() - oldNumPrimitives;
+  triangles.vertices.insert(triangles.vertices.end(),
+                            obj->triangles.vertices.begin(),
+                            obj->triangles.vertices.end());
+  triangles.face_normal.insert(triangles.face_normal.end(),
+                               obj->triangles.face_normal.begin(),
+                               obj->triangles.face_normal.end());
+  triangles.e1.insert(
+    triangles.e1.end(), obj->triangles.e1.begin(), obj->triangles.e1.end());
+  triangles.e2.insert(
+    triangles.e2.end(), obj->triangles.e2.begin(), obj->triangles.e2.end());
+  triangles.v0.insert(
+    triangles.v0.end(), obj->triangles.v0.begin(), obj->triangles.v0.end());
+  triangles.eps.insert(
+    triangles.eps.end(), obj->triangles.eps.begin(), obj->triangles.eps.end());
+  triangles.aabb_min.insert(triangles.aabb_min.end(),
+                            obj->triangles.aabb_min.begin(),
+                            obj->triangles.aabb_min.end());
+  triangles.aabb_max.insert(triangles.aabb_max.end(),
+                            obj->triangles.aabb_max.begin(),
+                            obj->triangles.aabb_max.end());
+  triangles.materials.insert(triangles.materials.end(),
+                             obj->triangles.materials.begin(),
+                             obj->triangles.materials.end());
+
+  ss << "# new primitives added: " << triangles.size() - oldNumTriangles;
   logging::DEBUG(ss.str());
 }
 
@@ -114,9 +141,21 @@ std::vector<Vertex*>
 ScenePart::getAllVertices() const
 {
   std::vector<Vertex*> allPos;
-  for (Primitive* p : mPrimitives) {
-    for (size_t i = 0; i < p->getNumVertices(); i++) {
-      allPos.push_back(p->getVertices() + i);
+  if (primitiveType == PrimitiveType::TRIANGLE) {
+    allPos.reserve(triangles.vertices.size());
+    for (Vertex const& v : triangles.vertices) {
+      allPos.push_back(const_cast<Vertex*>(&v));
+    }
+  } else if (primitiveType == PrimitiveType::VOXEL) {
+    allPos.reserve(voxels.centers.size());
+    for (Vertex const& v : voxels.centers) {
+      allPos.push_back(const_cast<Vertex*>(&v));
+    }
+  } else {
+    for (Primitive* p : mPrimitives) {
+      for (size_t i = 0; i < p->getNumVertices(); i++) {
+        allPos.push_back(p->getVertices() + i);
+      }
     }
   }
   return allPos;
@@ -125,47 +164,44 @@ ScenePart::getAllVertices() const
 void
 ScenePart::smoothVertexNormals()
 {
-  Triangle* t;
-  Vertex* v;
-  std::map<Vertex*, std::shared_ptr<std::vector<Triangle*>>> vtmap;
+  if (primitiveType != PrimitiveType::TRIANGLE)
+    return;
 
-  // Build map so for each vertex all triangles formed by it are known
-  for (size_t i = 0; i < mPrimitives.size(); i++) {
-    t = (Triangle*)mPrimitives[i];
-    for (int j = 0; j <= 2; j++) {
-      if (!vtmap.count(t->verts + j)) {
-        std::shared_ptr<std::vector<Triangle*>> vec =
-          std::make_shared<std::vector<Triangle*>>();
-        vtmap.insert({ t->verts + j, vec });
-      }
-      vtmap[t->verts + j]->push_back(t);
+  std::map<Vertex*, std::vector<PrimitiveIndex>> vtmap;
+  size_t const n = triangles.size();
+  for (PrimitiveIndex i = 0; i < n; ++i) {
+    Vertex* verts = &triangles.vertices[3 * i];
+    for (int j = 0; j < 3; ++j) {
+      vtmap[verts + j].push_back(i);
     }
   }
 
-  // Set the normal of each vertex as the mean of each triangle normal
-  std::shared_ptr<std::vector<Triangle*>> vec;
-  for (std::map<Vertex*, std::shared_ptr<std::vector<Triangle*>>>::iterator
-         iter = vtmap.begin();
-       iter != vtmap.end();
-       iter++) {
-    v = iter->first;
-    vec = iter->second;
-    v->normal[0] = 0.0;
-    v->normal[1] = 0.0;
-    v->normal[2] = 0.0;
-    for (Triangle* t : *vec) {
-      v->normal += t->getFaceNormal();
+  for (auto& it : vtmap) {
+    Vertex* v = it.first;
+    std::vector<PrimitiveIndex>& tris = it.second;
+    glm::dvec3 normal(0.0, 0.0, 0.0);
+    for (PrimitiveIndex i : tris) {
+      glm::dvec3 const e1 = triangles.e1[i];
+      glm::dvec3 const e2 = triangles.e2[i];
+      glm::dvec3 face = glm::cross(e1, e2);
+      double const len = glm::length(face);
+      if (len > 0.0)
+        face = face / len;
+      normal += face;
     }
-    v->normal = glm::normalize(v->normal);
+    if (glm::length(normal) > 0.0)
+      normal = glm::normalize(normal);
+    v->normal = normal;
   }
 }
 
-bool
+std::vector<std::shared_ptr<ScenePart>>
 ScenePart::splitSubparts()
 {
+  std::vector<std::shared_ptr<ScenePart>> newParts;
   size_t n = subpartLimit.size();
   if (n <= 1)
-    return false; // There is no need to do splits
+    return newParts; // There is no need to do splits
 
   // Prepare incremental ID
   int start = -1;
@@ -176,7 +212,7 @@ ScenePart::splitSubparts()
     ss << "Could not update subpart ID from \"" << mId << "\".\n "
        << "Thus, splitting subparts is aborted";
     logging::WARN(ss.str());
-    return false;
+    return newParts;
   }
 
   // Do splits
@@ -193,15 +229,127 @@ ScenePart::splitSubparts()
     newPart->mRotation = mRotation;
     newPart->mScale = mScale;
     newPart->forceOnGround = forceOnGround;
-    for (size_t j = subpartLimit[i - 1]; j < subpartLimit[i]; ++j) {
-      newPart->mPrimitives.push_back(mPrimitives[j]);
-      mPrimitives[j]->part = newPart;
+    newPart->primitiveType = primitiveType;
+    size_t const startIndex = subpartLimit[i - 1];
+    size_t const endIndex = subpartLimit[i];
+
+    if (primitiveType == PrimitiveType::TRIANGLE) {
+      size_t const vStart = 3 * startIndex;
+      size_t const vEnd = 3 * endIndex;
+      newPart->triangles.vertices.assign(triangles.vertices.begin() + vStart,
+                                         triangles.vertices.begin() + vEnd);
+      newPart->triangles.face_normal.assign(
+        triangles.face_normal.begin() + startIndex,
+        triangles.face_normal.begin() + endIndex);
+      newPart->triangles.e1.assign(triangles.e1.begin() + startIndex,
+                                   triangles.e1.begin() + endIndex);
+      newPart->triangles.e2.assign(triangles.e2.begin() + startIndex,
+                                   triangles.e2.begin() + endIndex);
+      newPart->triangles.v0.assign(triangles.v0.begin() + startIndex,
+                                   triangles.v0.begin() + endIndex);
+      newPart->triangles.eps.assign(triangles.eps.begin() + startIndex,
+                                    triangles.eps.begin() + endIndex);
+      newPart->triangles.aabb_min.assign(triangles.aabb_min.begin() +
+                                           startIndex,
+                                         triangles.aabb_min.begin() + endIndex);
+      newPart->triangles.aabb_max.assign(triangles.aabb_max.begin() +
+                                           startIndex,
+                                         triangles.aabb_max.begin() + endIndex);
+      newPart->triangles.materials.assign(
+        triangles.materials.begin() + startIndex,
+        triangles.materials.begin() + endIndex);
+    } else if (primitiveType == PrimitiveType::VOXEL) {
+      newPart->voxels.centers.assign(voxels.centers.begin() + startIndex,
+                                     voxels.centers.begin() + endIndex);
+      newPart->voxels.half_size.assign(voxels.half_size.begin() + startIndex,
+                                       voxels.half_size.begin() + endIndex);
+      newPart->voxels.num_points.assign(voxels.num_points.begin() + startIndex,
+                                        voxels.num_points.begin() + endIndex);
+      newPart->voxels.r.assign(voxels.r.begin() + startIndex,
+                               voxels.r.begin() + endIndex);
+      newPart->voxels.g.assign(voxels.g.begin() + startIndex,
+                               voxels.g.begin() + endIndex);
+      newPart->voxels.b.assign(voxels.b.begin() + startIndex,
+                               voxels.b.begin() + endIndex);
+      newPart->voxels.color.assign(voxels.color.begin() + startIndex,
+                                   voxels.color.begin() + endIndex);
+      newPart->voxels.aabb_min.assign(voxels.aabb_min.begin() + startIndex,
+                                      voxels.aabb_min.begin() + endIndex);
+      newPart->voxels.aabb_max.assign(voxels.aabb_max.begin() + startIndex,
+                                      voxels.aabb_max.begin() + endIndex);
+      newPart->voxels.materials.assign(voxels.materials.begin() + startIndex,
+                                       voxels.materials.begin() + endIndex);
+
+      if (!detailed_voxels.present.empty()) {
+        newPart->detailed_voxels.present.assign(
+          detailed_voxels.present.begin() + startIndex,
+          detailed_voxels.present.begin() + endIndex);
+        newPart->detailed_voxels.int_values.assign(
+          detailed_voxels.int_values.begin() + startIndex,
+          detailed_voxels.int_values.begin() + endIndex);
+        newPart->detailed_voxels.double_values.assign(
+          detailed_voxels.double_values.begin() + startIndex,
+          detailed_voxels.double_values.begin() + endIndex);
+        newPart->detailed_voxels.max_pad.assign(
+          detailed_voxels.max_pad.begin() + startIndex,
+          detailed_voxels.max_pad.begin() + endIndex);
+      }
     }
+
+    newPart->buildPrimitiveViewsFromBulk();
     newPart->mId = std::to_string(start + i);
+    newParts.push_back(newPart);
   }
 
-  // Remove splitted primitives
-  mPrimitives.erase(mPrimitives.begin() + subpartLimit[0], mPrimitives.end());
+  // Remove splitted primitives from current part
+  if (primitiveType == PrimitiveType::TRIANGLE) {
+    size_t const keep = subpartLimit[0];
+    triangles.vertices.erase(triangles.vertices.begin() + 3 * keep,
+                             triangles.vertices.end());
+    triangles.face_normal.erase(triangles.face_normal.begin() + keep,
+                                triangles.face_normal.end());
+    triangles.e1.erase(triangles.e1.begin() + keep, triangles.e1.end());
+    triangles.e2.erase(triangles.e2.begin() + keep, triangles.e2.end());
+    triangles.v0.erase(triangles.v0.begin() + keep, triangles.v0.end());
+    triangles.eps.erase(triangles.eps.begin() + keep, triangles.eps.end());
+    triangles.aabb_min.erase(triangles.aabb_min.begin() + keep,
+                             triangles.aabb_min.end());
+    triangles.aabb_max.erase(triangles.aabb_max.begin() + keep,
+                             triangles.aabb_max.end());
+    triangles.materials.erase(triangles.materials.begin() + keep,
+                              triangles.materials.end());
+  } else if (primitiveType == PrimitiveType::VOXEL) {
+    size_t const keep = subpartLimit[0];
+    voxels.centers.erase(voxels.centers.begin() + keep, voxels.centers.end());
+    voxels.half_size.erase(voxels.half_size.begin() + keep,
+                           voxels.half_size.end());
+    voxels.num_points.erase(voxels.num_points.begin() + keep,
+                            voxels.num_points.end());
+    voxels.r.erase(voxels.r.begin() + keep, voxels.r.end());
+    voxels.g.erase(voxels.g.begin() + keep, voxels.g.end());
+    voxels.b.erase(voxels.b.begin() + keep, voxels.b.end());
+    voxels.color.erase(voxels.color.begin() + keep, voxels.color.end());
+    voxels.aabb_min.erase(voxels.aabb_min.begin() + keep,
+                          voxels.aabb_min.end());
+    voxels.aabb_max.erase(voxels.aabb_max.begin() + keep,
+                          voxels.aabb_max.end());
+    voxels.materials.erase(voxels.materials.begin() + keep,
+                           voxels.materials.end());
+
+    if (!detailed_voxels.present.empty()) {
+      detailed_voxels.present.erase(detailed_voxels.present.begin() + keep,
+                                    detailed_voxels.present.end());
+      detailed_voxels.int_values.erase(detailed_voxels.int_values.begin() +
+                                         keep,
+                                       detailed_voxels.int_values.end());
+      detailed_voxels.double_values.erase(
+        detailed_voxels.double_values.begin() + keep,
+        detailed_voxels.double_values.end());
+      detailed_voxels.max_pad.erase(detailed_voxels.max_pad.begin() + keep,
+                                    detailed_voxels.max_pad.end());
+    }
+  }
+  buildPrimitiveViewsFromBulk();
   subpartLimit.clear();
   mId = std::to_string(start);
 
@@ -219,7 +367,7 @@ ScenePart::splitSubparts()
    *  those subparts in future. The original purpose for this split was to
    *  have different hitObjectId for different components.
    */
-  return true;
+  return newParts;
 }
 
 void
@@ -273,23 +421,84 @@ ScenePart::clearBulkData()
 }
 
 void
+ScenePart::clearPrimitiveCache()
+{
+  mPrimitives.clear();
+  primitiveCache.reset();
+}
+
+static std::shared_ptr<ScenePart>
+makeNonOwningShared(ScenePart* sp)
+{
+  return std::shared_ptr<ScenePart>(sp, [](ScenePart*) {});
+}
+
+void
+ScenePart::buildPrimitiveViewsFromBulk()
+{
+  clearPrimitiveCache();
+  primitiveCache = std::make_unique<ScenePartPrimitiveCache>();
+
+  std::shared_ptr<ScenePart> partPtr = makeNonOwningShared(this);
+
+  if (primitiveType == PrimitiveType::TRIANGLE) {
+    std::size_t const n = triangles.size();
+    primitiveCache->triangleViews.resize(n);
+    mPrimitives.reserve(n);
+    for (PrimitiveIndex i = 0; i < n; ++i) {
+      primitiveCache->triangleViews[i] = TriangleView(this, i);
+      TriangleView& view = primitiveCache->triangleViews[i];
+      view.part = partPtr;
+      if (i < triangles.materials.size())
+        view.material = triangles.materials[i];
+      mPrimitives.push_back(&view);
+    }
+    return;
+  }
+
+  if (primitiveType == PrimitiveType::VOXEL) {
+    std::size_t const n = voxels.size();
+    primitiveCache->voxelViews.resize(n);
+    primitiveCache->detailedVoxelViews.resize(n);
+    mPrimitives.reserve(n);
+    for (PrimitiveIndex i = 0; i < n; ++i) {
+      primitiveCache->voxelViews[i] = VoxelView(this, i);
+      primitiveCache->detailedVoxelViews[i] = DetailedVoxelView(this, i);
+
+      bool isDetailed =
+        (i < detailed_voxels.present.size() && detailed_voxels.present[i] != 0);
+      if (isDetailed) {
+        DetailedVoxelView& view = primitiveCache->detailedVoxelViews[i];
+        view.part = partPtr;
+        if (i < voxels.materials.size())
+          view.material = voxels.materials[i];
+        mPrimitives.push_back(&view);
+      } else {
+        VoxelView& view = primitiveCache->voxelViews[i];
+        view.part = partPtr;
+        if (i < voxels.materials.size())
+          view.material = voxels.materials[i];
+        mPrimitives.push_back(&view);
+      }
+    }
+  }
+}
+
+void
 ScenePart::buildBulkFromPrimitives()
 {
   clearBulkData();
   if (mPrimitives.empty())
     return;
 
+  if (primitiveType == PrimitiveType::NONE) {
+    size_t const numVertices = mPrimitives[0]->getNumVertices();
+    primitiveType =
+      (numVertices == 3) ? PrimitiveType::TRIANGLE : PrimitiveType::VOXEL;
+  }
+
   if (primitiveType == PrimitiveType::TRIANGLE) {
     std::size_t const n = mPrimitives.size();
-    triangles.vertices.reserve(3 * n);
-    triangles.face_normal.reserve(n);
-    triangles.e1.reserve(n);
-    triangles.e2.reserve(n);
-    triangles.v0.reserve(n);
-    triangles.eps.reserve(n);
-    triangles.aabb_min.reserve(n);
-    triangles.aabb_max.reserve(n);
-    triangles.materials.reserve(n);
 
     for (Primitive* primitive : mPrimitives) {
       Triangle* t = dynamic_cast<Triangle*>(primitive);
@@ -301,62 +510,12 @@ ScenePart::buildBulkFromPrimitives()
       }
 
       Vertex* verts = t->getVertices();
-      triangles.vertices.push_back(verts[0]);
-      triangles.vertices.push_back(verts[1]);
-      triangles.vertices.push_back(verts[2]);
-
-      glm::dvec3 v0 = verts[0].pos;
-      glm::dvec3 e1 = verts[1].pos - v0;
-      glm::dvec3 e2 = verts[2].pos - v0;
-      glm::dvec3 normal = glm::cross(e1, e2);
-      double const normal_len = glm::length(normal);
-      if (normal_len > 0.0)
-        normal = normal / normal_len;
-
-      triangles.v0.push_back(v0);
-      triangles.e1.push_back(e1);
-      triangles.e2.push_back(e2);
-      triangles.face_normal.push_back(normal);
-      triangles.eps.push_back(0.0000001);
-
-      double minX =
-        std::min(std::min(verts[0].getX(), verts[1].getX()), verts[2].getX());
-      double minY =
-        std::min(std::min(verts[0].getY(), verts[1].getY()), verts[2].getY());
-      double minZ =
-        std::min(std::min(verts[0].getZ(), verts[1].getZ()), verts[2].getZ());
-      double maxX =
-        std::max(std::max(verts[0].getX(), verts[1].getX()), verts[2].getX());
-      double maxY =
-        std::max(std::max(verts[0].getY(), verts[1].getY()), verts[2].getY());
-      double maxZ =
-        std::max(std::max(verts[0].getZ(), verts[1].getZ()), verts[2].getZ());
-      triangles.aabb_min.push_back(glm::dvec3(minX, minY, minZ));
-      triangles.aabb_max.push_back(glm::dvec3(maxX, maxY, maxZ));
-
-      triangles.materials.push_back(t->material);
+      appendTriangleBulk(triangles, verts[0], verts[1], verts[2], t->material);
     }
     return;
   }
 
   if (primitiveType == PrimitiveType::VOXEL) {
-    std::size_t const n = mPrimitives.size();
-    voxels.centers.reserve(n);
-    voxels.half_size.reserve(n);
-    voxels.num_points.reserve(n);
-    voxels.r.reserve(n);
-    voxels.g.reserve(n);
-    voxels.b.reserve(n);
-    voxels.color.reserve(n);
-    voxels.aabb_min.reserve(n);
-    voxels.aabb_max.reserve(n);
-    voxels.materials.reserve(n);
-
-    detailed_voxels.present.reserve(n);
-    detailed_voxels.int_values.reserve(n);
-    detailed_voxels.double_values.reserve(n);
-    detailed_voxels.max_pad.reserve(n);
-
     for (Primitive* primitive : mPrimitives) {
       Voxel* v = dynamic_cast<Voxel*>(primitive);
       if (v == nullptr) {
@@ -366,18 +525,15 @@ ScenePart::buildBulkFromPrimitives()
         return;
       }
 
-      voxels.centers.push_back(v->v);
-      voxels.half_size.push_back(v->halfSize);
-      voxels.num_points.push_back(v->numPoints);
-      voxels.r.push_back(v->r);
-      voxels.g.push_back(v->g);
-      voxels.b.push_back(v->b);
-      voxels.color.push_back(v->color);
-      voxels.materials.push_back(v->material);
-
-      glm::dvec3 hs = glm::dvec3(v->halfSize, v->halfSize, v->halfSize);
-      voxels.aabb_min.push_back(v->v.pos - hs);
-      voxels.aabb_max.push_back(v->v.pos + hs);
+      appendVoxelBulk(voxels,
+                      v->v,
+                      v->halfSize,
+                      v->numPoints,
+                      v->r,
+                      v->g,
+                      v->b,
+                      v->color,
+                      v->material);
 
       DetailedVoxel* dv = dynamic_cast<DetailedVoxel*>(primitive);
       if (dv == nullptr) {
@@ -411,7 +567,8 @@ ScenePart::buildPrimitivesFromBulk(bool const clearExisting)
 {
   if (clearExisting) {
     for (Primitive* p : mPrimitives)
-      delete p;
+      if (!isPrimitiveView(p))
+        delete p;
     mPrimitives.clear();
   }
 
@@ -494,12 +651,42 @@ ScenePart::buildPrimitivesFromBulk(bool const clearExisting)
 }
 
 void
+ScenePart::setPrimitives(std::vector<Primitive*> const& primitives)
+{
+  for (Primitive* p : mPrimitives) {
+    if (!isPrimitiveView(p))
+      delete p;
+  }
+  mPrimitives = primitives;
+  if (mPrimitives.empty()) {
+    clearBulkData();
+    clearPrimitiveCache();
+    primitiveType = PrimitiveType::NONE;
+    return;
+  }
+
+  buildBulkFromPrimitives();
+
+  for (Primitive* p : mPrimitives) {
+    if (!isPrimitiveView(p))
+      delete p;
+  }
+  mPrimitives.clear();
+
+  buildPrimitiveViewsFromBulk();
+}
+
+void
 ScenePart::computeTransformations(std::shared_ptr<ScenePart> sp,
                                   bool const holistic)
 {
   // For all primitives, set reference to their scene part and transform:
+  std::shared_ptr<ScenePart> nonOwning = makeNonOwningShared(sp.get());
   for (Primitive* p : sp->mPrimitives) {
-    p->part = sp;
+    if (isPrimitiveView(p))
+      p->part = nonOwning;
+    else
+      p->part = sp;
     p->rotate(sp->mRotation);
     if (holistic) {
       for (size_t i = 0; i < p->getNumVertices(); i++) {
@@ -517,13 +704,16 @@ void
 ScenePart::release()
 {
   for (Primitive* p : mPrimitives) {
-    delete p;
+    if (!isPrimitiveView(p))
+      delete p;
   }
   mPrimitives.clear();
+  clearPrimitiveCache();
   clearBulkData();
   if (sorh != nullptr) {
     for (Primitive* p : sorh->getBaselinePrimitives()) {
-      delete p;
+      if (!isPrimitiveView(p))
+        delete p;
     }
     sorh->baseline = nullptr;
     sorh = nullptr;
