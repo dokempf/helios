@@ -43,11 +43,6 @@ DynMovingObject::doSimStep()
   if (primitiveType == PrimitiveType::TRIANGLE ||
       primitiveType == PrimitiveType::VOXEL) {
     updateBulk();
-  } else {
-    for (Primitive* prim : mPrimitives) {
-      if (prim != nullptr)
-        prim->update();
-    }
   }
 
   // Notify observer if modified

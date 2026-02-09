@@ -1,9 +1,10 @@
 #pragma once
 
 #include <assetloading/ScenePart.h>
-#include <scene/primitives/PrimitiveViews.h>
 
 #include <AABB.h>
+#include <IntersectionHandlingResult.h>
+#include <NoiseSource.h>
 
 /**
  * @brief Helper utilities to access bulk primitive data by index.
@@ -33,6 +34,21 @@ public:
   static std::shared_ptr<Material> getMaterial(PrimitiveRef const& ref);
   static bool isGround(PrimitiveRef const& ref);
 
-  // Transitional: map refs back to view pointers for legacy APIs.
-  static Primitive* getPrimitiveView(PrimitiveRef const& ref);
+  static double getIncidenceAngle_rad(PrimitiveRef const& ref,
+                                      glm::dvec3 const& rayOrigin,
+                                      glm::dvec3 const& rayDir,
+                                      glm::dvec3 const& intersectionPoint);
+  static bool canHandleIntersections(PrimitiveRef const& ref);
+  static IntersectionHandlingResult onRayIntersection(
+    PrimitiveRef const& ref,
+    NoiseSource<double>& uniformNoiseSource,
+    glm::dvec3& rayDirection,
+    glm::dvec3 const& insideIntersectionPoint,
+    glm::dvec3 const& outsideIntersectionPoint,
+    double rayIntensity);
+  static void onFinishLoading(PrimitiveRef const& ref,
+                              NoiseSource<double>& uniformNoiseSource);
+  static bool canComputeSigmaWithLadLut(PrimitiveRef const& ref);
+  static double computeSigmaWithLadLut(PrimitiveRef const& ref,
+                                       glm::dvec3 const& direction);
 };

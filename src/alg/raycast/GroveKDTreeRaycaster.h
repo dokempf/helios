@@ -61,11 +61,11 @@ public:
   /**
    * @see Raycaster::searchAll
    */
-  std::map<double, Primitive*> searchAll(glm::dvec3 rayOrigin,
-                                         glm::dvec3 rayDir,
-                                         double tmin,
-                                         double tmax,
-                                         bool groundOnly) override
+  std::map<double, PrimitiveRef> searchAll(glm::dvec3 rayOrigin,
+                                           glm::dvec3 rayDir,
+                                           double tmin,
+                                           double tmax,
+                                           bool groundOnly) override
   {
     return KDTreeRaycaster::searchAll(
       rayOrigin, rayDir, tmin, tmax, groundOnly);

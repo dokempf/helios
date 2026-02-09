@@ -15,7 +15,6 @@ target_sources(
   "Scene.cpp"
   "primitives/Primitive.cpp"
   "primitives/PrimitiveAccessor.cpp"
-  "primitives/PrimitiveViews.cpp"
   "primitives/DetailedVoxel.cpp"
   "primitives/Voxel.cpp"
   "primitives/Vertex.cpp"

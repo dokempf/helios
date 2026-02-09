@@ -8,7 +8,6 @@
 #include <XmlSceneLoader.h>
 #include <XmlUtils.h>
 #include <scene/dynamic/DynScene.h>
-#include <scene/primitives/PrimitiveViews.h>
 
 #include <logging.hpp>
 
@@ -303,7 +302,7 @@ XmlSceneLoader::validateScenePart(std::shared_ptr<ScenePart> scenePart,
     hasBulk = !scenePart->voxels.centers.empty();
   }
   if (scenePart->getPrimitiveType() == ScenePart::PrimitiveType::NONE &&
-      scenePart->mPrimitives.empty() && !hasBulk) {
+      !hasBulk) {
     // Obtain the path
     std::string path = "#NULL#";
     std::string pathType = "path";
@@ -357,17 +356,6 @@ XmlSceneLoader::digestScenePart(std::shared_ptr<ScenePart>& scenePart,
     else if (!scenePart->voxels.centers.empty())
       scenePart->primitiveType = ScenePart::PrimitiveType::VOXEL;
   }
-  if (scenePart->mPrimitives.empty()) {
-    bool hasBulk = false;
-    if (scenePart->primitiveType == ScenePart::PrimitiveType::TRIANGLE) {
-      hasBulk = !scenePart->triangles.vertices.empty();
-    } else if (scenePart->primitiveType == ScenePart::PrimitiveType::VOXEL) {
-      hasBulk = !scenePart->voxels.centers.empty();
-    }
-    if (hasBulk)
-      scenePart->buildPrimitiveViewsFromBulk();
-  }
-
   // For all primitives, set reference to their scene part and transform:
   ScenePart::computeTransformations(scenePart, holistic);
 
@@ -385,21 +373,17 @@ XmlSceneLoader::digestScenePart(std::shared_ptr<ScenePart>& scenePart,
   for (std::shared_ptr<ScenePart>& part : partsToAdd) {
     // Append as static object if it is not dynamic
     // If it is dynamic, it must have been appended before
-    if (!dynObject)
+    if (!dynObject) {
       scene->appendStaticObject(part);
-
-    // Add scene part primitives to the scene
-    scene->primitives.insert(scene->primitives.end(),
-                             part->mPrimitives.begin(),
-                             part->mPrimitives.end());
+      scene->parts.push_back(part);
+    }
 
     // Infer type of primitive for the scene part
     if (part->primitiveType == ScenePart::PrimitiveType::NONE &&
-        !part->mPrimitives.empty()) {
-      size_t const numVertices = part->mPrimitives[0]->getNumVertices();
-      if (numVertices == 3)
+        (!part->triangles.vertices.empty() || !part->voxels.centers.empty())) {
+      if (!part->triangles.vertices.empty())
         part->primitiveType = ScenePart::TRIANGLE;
-      else
+      else if (!part->voxels.centers.empty())
         part->primitiveType = ScenePart::VOXEL;
     }
   }
@@ -507,16 +491,6 @@ XmlSceneLoader::loadDynMotions(tinyxml2::XMLElement* scenePartNode,
     dmotionNode = dmotionNode->NextSiblingElement("dmotion");
   }
 
-  // Update scene part for each primitive so it is the new DMO
-  std::shared_ptr<ScenePart> nonOwning =
-    std::shared_ptr<ScenePart>(dsmo.get(), [](ScenePart*) {});
-  for (Primitive* primitive : dsmo->mPrimitives) {
-    if (isPrimitiveView(primitive))
-      primitive->part = nonOwning;
-    else
-      primitive->part = dsmo;
-  }
-
   // Use scene part ID to build dynamic sequentiable moving object ID
   std::stringstream ss;
   ss << "DSMO_" << scenePart->mId;
@@ -550,12 +524,7 @@ XmlSceneLoader::makeSceneDynamic(std::shared_ptr<StaticScene> scene)
   // It is as simple as rebuilding the static objects because at this point
   // there is no dynamic object in the scene yet, since it didnt support them
   newScene->clearStaticObjects();
-  std::set<std::shared_ptr<ScenePart>> parts; // Scene parts with no repeats
-  std::vector<Primitive*> const primitives = newScene->primitives;
-  for (Primitive* primitive : primitives)
-    if (primitive->part != nullptr)
-      parts.insert(primitive->part);
-  for (std::shared_ptr<ScenePart> part : parts)
+  for (std::shared_ptr<ScenePart> const& part : newScene->parts)
     newScene->appendStaticObject(part);
 
   // Return upgraded scene

@@ -2,8 +2,6 @@
 #include <ScenePart.h>
 #include <SwapOnRepeatHandler.h>
 #include <XYZPointCloudFileLoader.h>
-#include <scene/primitives/Primitive.h>
-#include <scene/primitives/PrimitiveViews.h>
 
 // ***  CONSTRUCTION / DESTRUCTION  *** //
 // ************************************ //
@@ -40,8 +38,6 @@ SwapOnRepeatHandler::prepare(ScenePart* sp)
   }
   numCurrentSwaps = 0;
   this->baseline = std::make_unique<ScenePart>(*sp);
-  for (Primitive* p : this->baseline->mPrimitives)
-    p->part = nullptr;
 }
 
 // ***  GETTERs and SETTERs  *** //
@@ -57,12 +53,6 @@ void
 SwapOnRepeatHandler::pushTimeToLive(int const timeToLive)
 {
   this->timesToLive.push_back(timeToLive);
-}
-
-std::vector<Primitive*>&
-SwapOnRepeatHandler::getBaselinePrimitives()
-{
-  return baseline->mPrimitives;
 }
 
 // ***  UTIL METHODS  *** //
@@ -119,11 +109,6 @@ SwapOnRepeatHandler::doSwap(ScenePart& sp)
 void
 SwapOnRepeatHandler::doGeometricSwap(ScenePart& src, ScenePart& dst)
 {
-  for (Primitive* p : dst.mPrimitives) {
-    if (!isPrimitiveView(p))
-      delete p;
-  }
-  dst.clearPrimitiveCache();
   // Assign to dst from src
   dst.primitiveType = src.primitiveType;
   dst.triangles = src.triangles;
@@ -138,5 +123,5 @@ SwapOnRepeatHandler::doGeometricSwap(ScenePart& src, ScenePart& dst)
   dst.ladlut = src.ladlut;
   dst.mCrs = src.mCrs;
   dst.mEnv = src.mEnv;
-  dst.buildPrimitiveViewsFromBulk();
+  dst.updateBulk();
 }

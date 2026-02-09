@@ -44,7 +44,6 @@ GeoTiffFileLoader::run()
     // Finish primsOut
     primsOut->mEnv = env;
     primsOut->smoothVertexNormals();
-    primsOut->buildPrimitiveViewsFromBulk();
 
     // Release vertices
     releaseVertices();

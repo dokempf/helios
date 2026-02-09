@@ -6,6 +6,7 @@
 #include <FullWaveformPulseDetector.h>
 #include <HelicopterPlatform.h>
 #include <OscillatingMirrorBeamDeflector.h>
+#include <ScenePart.h>
 #include <Survey.h>
 #include <scanner/SingleScanner.h>
 
@@ -51,20 +52,37 @@ TEST_CASE("Survey Copy Test")
   std::shared_ptr<Scene> baseScene = std::make_shared<Scene>();
   survey->scanner->platform->scene = baseScene;
 
-  baseScene->primitives.push_back(new Triangle(Vertex(), Vertex(), Vertex()));
-  baseScene->primitives[0]->part = std::make_shared<ScenePart>();
-  baseScene->primitives[0]->part->mPrimitives.push_back(
-    baseScene->primitives[0]);
-  baseScene->primitives[0]->part->onRayIntersectionMode = "TRANSMITTIVE";
+  auto triPart = std::make_shared<ScenePart>();
+  triPart->primitiveType = ScenePart::PrimitiveType::TRIANGLE;
+  triPart->onRayIntersectionMode = "TRANSMITTIVE";
+  Vertex t0(0.0, 0.0, 0.0);
+  Vertex t1(0.0, 0.0, 0.0);
+  Vertex t2(0.0, 0.0, 0.0);
+  appendTriangleBulk(
+    triPart->triangles, t0, t1, t2, std::make_shared<Material>());
+  baseScene->parts.push_back(triPart);
 
-  baseScene->primitives.push_back(
-    new DetailedVoxel(glm::dvec3(0.0, 0.0, 0.5),
-                      2.15,
-                      std::vector<int>({ 1, 2 }),
-                      std::vector<double>({ 0.1, 0.2, 0.3 })));
-  baseScene->primitives[1]->material = std::make_shared<Material>();
-  baseScene->primitives[1]->material->ka[0] = 1.1;
-  baseScene->primitives[1]->material->ks[1] = 1.2;
+  auto voxelPart = std::make_shared<ScenePart>();
+  voxelPart->primitiveType = ScenePart::PrimitiveType::VOXEL;
+  auto dvMat = std::make_shared<Material>();
+  dvMat->ka[0] = 1.1;
+  dvMat->ks[0] = 0.4;
+  dvMat->ks[1] = 1.2;
+  appendVoxelBulk(voxelPart->voxels,
+                  Vertex(0.0, 0.0, 0.5),
+                  2.15,
+                  0,
+                  0.0,
+                  0.0,
+                  0.0,
+                  Color4f(),
+                  dvMat);
+  voxelPart->detailed_voxels.present.push_back(1);
+  voxelPart->detailed_voxels.int_values.push_back({ 1, 2 });
+  voxelPart->detailed_voxels.double_values.push_back({ 0.1, 0.2, 0.3 });
+  voxelPart->detailed_voxels.max_pad.push_back(0.0);
+  baseScene->parts.push_back(voxelPart);
+  baseScene->registerParts();
 
   // Copy base Survey
   std::shared_ptr<Survey> copy = std::make_shared<Survey>(*survey, true);
@@ -89,11 +107,10 @@ TEST_CASE("Survey Copy Test")
   copy->legs[0]->mPlatformSettings->onGround = true;
 
   std::shared_ptr<Scene> copyScene = copy->scanner->platform->scene;
-  copyScene->primitives[0]->getVertices()[0].pos.x += 0.1;
-  copyScene->primitives[0]->part->onRayIntersectionArgument += 0.034;
-  copyScene->primitives[1]->material->ks[1] += 0.1;
-  DetailedVoxel* copyDv = (DetailedVoxel*)copyScene->primitives[1];
-  (*copyDv)[1] += 0.1;
+  copyScene->parts[0]->triangles.vertices[0].pos.x += 0.1;
+  copyScene->parts[0]->onRayIntersectionArgument += 0.034;
+  copyScene->parts[1]->voxels.materials[0]->ks[1] += 0.1;
+  copyScene->parts[1]->detailed_voxels.double_values[0][1] += 0.1;
 
   // Validate the copy
   REQUIRE(copy->name != survey->name);
@@ -144,18 +161,19 @@ TEST_CASE("Survey Copy Test")
   REQUIRE(copy->legs[0]->mPlatformSettings->stopAndTurn ==
           survey->legs[0]->mPlatformSettings->stopAndTurn);
 
-  REQUIRE(copyScene->primitives[0]->getVertices()[0].pos.x !=
-          baseScene->primitives[0]->getVertices()[0].pos.x);
-  REQUIRE(copyScene->primitives[0]->getVertices()[0].pos.y ==
-          baseScene->primitives[0]->getVertices()[0].pos.y);
-  REQUIRE(copyScene->primitives[0]->part->onRayIntersectionArgument !=
-          baseScene->primitives[0]->part->onRayIntersectionArgument);
-  REQUIRE(copyScene->primitives[1]->material->ks[0] ==
-          baseScene->primitives[1]->material->ks[0]);
-  REQUIRE(copyScene->primitives[1]->material->ks[1] !=
-          baseScene->primitives[1]->material->ks[1]);
+  REQUIRE(copyScene->parts[0]->triangles.vertices[0].pos.x !=
+          baseScene->parts[0]->triangles.vertices[0].pos.x);
+  REQUIRE(copyScene->parts[0]->triangles.vertices[0].pos.y ==
+          baseScene->parts[0]->triangles.vertices[0].pos.y);
+  REQUIRE(copyScene->parts[0]->onRayIntersectionArgument !=
+          baseScene->parts[0]->onRayIntersectionArgument);
+  REQUIRE(copyScene->parts[1]->voxels.materials[0]->ks[0] ==
+          baseScene->parts[1]->voxels.materials[0]->ks[0]);
+  REQUIRE(copyScene->parts[1]->voxels.materials[0]->ks[1] !=
+          baseScene->parts[1]->voxels.materials[0]->ks[1]);
 
-  DetailedVoxel* baseDv = (DetailedVoxel*)baseScene->primitives[1];
-  REQUIRE((*copyDv)[1] != (*baseDv)[1]);
-  REQUIRE((*copyDv)[0] == (*baseDv)[0]);
+  REQUIRE(copyScene->parts[1]->detailed_voxels.double_values[0][1] !=
+          baseScene->parts[1]->detailed_voxels.double_values[0][1]);
+  REQUIRE(copyScene->parts[1]->detailed_voxels.double_values[0][0] ==
+          baseScene->parts[1]->detailed_voxels.double_values[0][0]);
 }

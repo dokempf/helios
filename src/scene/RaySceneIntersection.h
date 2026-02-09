@@ -1,8 +1,9 @@
 #pragma once
 
-#include <Primitive.h>
 #include <PrintUtils.h>
+#include <assetloading/ScenePart.h>
 
+#include <glm/glm.hpp>
 #include <ostream>
 
 /**
@@ -18,7 +19,7 @@ public:
   /**
    * @brief Primitive intersected by the ray
    */
-  Primitive* prim;
+  PrimitiveRef prim;
   /**
    * @brief Intersection point
    */
@@ -36,7 +37,8 @@ public:
   // *************************** //
   friend std::ostream& operator<<(std::ostream& out, RaySceneIntersection& itst)
   {
-    out << itst.prim << "," << itst.point << "," << itst.incidenceAngle;
+    out << itst.prim.part << ":" << itst.prim.index << "," << itst.point << ","
+        << itst.incidenceAngle;
     return out;
   }
 };

@@ -107,7 +107,7 @@ public:
    * @see VHStaticObjectAdapter::buildPolymesh
    * @see VHStaticObjectAdapter::addVoxelToPolymesh
    */
-  virtual void addTriangleToPolymesh(Primitive* primitive, int& offset);
+  virtual void addTriangleToPolymesh(Vertex const* vertices, int& offset);
   /**
    * @brief Function to add voxel primitives to the polymesh during
    *  building time
@@ -116,7 +116,9 @@ public:
    * @see VHStaticObjectAdapter::buildPolymesh
    * @see VHStaticObjectAdapter::addTriangleToPolymesh
    */
-  virtual void addVoxelToPolymesh(Primitive* primitive, int& offset);
+  virtual void addVoxelToPolymesh(Vertex const& center,
+                                  double halfSize,
+                                  int& offset);
 
   // ***  GETTERS and SETTERS  *** //
   // ***************************** //

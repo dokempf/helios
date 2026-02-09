@@ -100,9 +100,6 @@ TEST_CASE("Serialization Test")
                     1.0,
                     std::vector<int>({ 0, 1, 2 }),
                     std::vector<double>({ 1.0, 1.5, 2.0, 2.5, 3.0 }));
-  dv1.part = std::make_shared<ScenePart>();
-  dv1.part->mPrimitives.push_back(&dv1);
-  dv1.part->onRayIntersectionMode = "TRANSMITTIVE";
   dv1.material = std::make_shared<Material>();
   dv1.material->ka[0] = 1.0;
   dv1.material->ka[1] = 2.0;
@@ -128,86 +125,145 @@ TEST_CASE("Serialization Test")
     t1v1.pos = glm::dvec3(0.0, 0.0, 0.0);
     t1v2.pos = glm::dvec3(0.0, 0.0, 4.0);
     t1v3.pos = glm::dvec3(2.0, 0.0, 0.0);
-    Triangle t1(t1v1, t1v2, t1v3);
-    t1.material = std::make_shared<Material>();
-    Voxel v1(1.0, 1.0, 1.0, 1.0);
-    AABB box1(glm::dvec3(0.0, 0.0, 0.0), glm::dvec3(5.0, 5.0, 5.0));
-
     std::shared_ptr<ScenePart> triPart = std::make_shared<ScenePart>();
-    std::vector<Primitive*> triPrims;
-    triPrims.push_back(t1.clone());
-    triPart->setPrimitives(triPrims);
+    triPart->primitiveType = ScenePart::PrimitiveType::TRIANGLE;
+    auto triMat = std::make_shared<Material>();
+    appendTriangleBulk(triPart->triangles, t1v1, t1v2, t1v3, triMat);
 
     std::shared_ptr<ScenePart> voxelPart = std::make_shared<ScenePart>();
-    std::vector<Primitive*> voxelPrims;
-    voxelPrims.push_back(dv1.clone());
-    voxelPrims.push_back(v1.clone());
+    voxelPart->primitiveType = ScenePart::PrimitiveType::VOXEL;
+    voxelPart->onRayIntersectionMode = "TRANSMITTIVE";
+    auto dvMat = std::make_shared<Material>();
+    dvMat->ka[0] = 1.0;
+    dvMat->ka[1] = 2.0;
+    dvMat->ka[2] = 3.0;
+    dvMat->ka[3] = 4.0;
+    auto vMat = std::make_shared<Material>();
+    vMat->ks[0] = 0.4;
+    vMat->ks[1] = 0.6;
+
+    auto appendDetailed = [&](Vertex const& center,
+                              double halfSize,
+                              std::shared_ptr<Material> const& mat,
+                              bool present,
+                              std::vector<int> const& intValues,
+                              std::vector<double> const& doubleValues,
+                              double maxPad) {
+      appendVoxelBulk(
+        voxelPart->voxels, center, halfSize, 0, 0.0, 0.0, 0.0, Color4f(), mat);
+      voxelPart->detailed_voxels.present.push_back(present ? 1 : 0);
+      if (present) {
+        voxelPart->detailed_voxels.int_values.push_back(intValues);
+        voxelPart->detailed_voxels.double_values.push_back(doubleValues);
+        voxelPart->detailed_voxels.max_pad.push_back(maxPad);
+      } else {
+        voxelPart->detailed_voxels.int_values.emplace_back();
+        voxelPart->detailed_voxels.double_values.emplace_back();
+        voxelPart->detailed_voxels.max_pad.push_back(0.0);
+      }
+    };
+
+    appendDetailed(Vertex(1.0, 2.0, 1.0),
+                   1.0,
+                   dvMat,
+                   true,
+                   { 0, 1, 2 },
+                   { 1.0, 1.5, 2.0, 2.5, 3.0 },
+                   0.0);
+    appendDetailed(Vertex(1.0, 1.0, 1.0), 1.0, vMat, false, {}, {}, 0.0);
     for (std::size_t i = 0; i < nRepeats; i++) {
-      voxelPrims.push_back(dv1.clone());
+      appendDetailed(Vertex(1.0, 2.0, 1.0),
+                     1.0,
+                     dvMat,
+                     true,
+                     { 0, 1, 2 },
+                     { 1.0, 1.5, 2.0, 2.5, 3.0 },
+                     0.0);
     }
-    voxelPart->setPrimitives(voxelPrims);
 
     scene1.parts.push_back(triPart);
     scene1.parts.push_back(voxelPart);
-    scene1.primitives.insert(scene1.primitives.end(),
-                             triPart->mPrimitives.begin(),
-                             triPart->mPrimitives.end());
-    scene1.primitives.insert(scene1.primitives.end(),
-                             voxelPart->mPrimitives.begin(),
-                             voxelPart->mPrimitives.end());
-    scene1.primitives.push_back(box1.clone());
     scene1.finalizeLoading(true);
     std::shared_ptr<KDGroveFactory> kdgf = scene1.getKDGroveFactory();
     scene1.writeObject(path);
     scene1.setKDGroveFactory(kdgf);
     Scene* scene2 = Scene::readObject(path);
 
-    size_t const triIndex = 0;
-    size_t const voxelStart = triPart->mPrimitives.size();
-    size_t const dvIndex = voxelStart;
-    size_t const vIndex = voxelStart + 1;
-    size_t const repeatStart = voxelStart + 2;
-    size_t const aabbIndex = voxelStart + voxelPart->mPrimitives.size();
+    REQUIRE(scene2->parts.size() == scene1.parts.size());
+    REQUIRE(scene2->parts.size() == 2);
 
-    std::unique_ptr<DetailedVoxel> dv1Copy(
-      dynamic_cast<DetailedVoxel*>(scene1.primitives[dvIndex]->clone()));
-    std::unique_ptr<DetailedVoxel> dv2Copy(
-      dynamic_cast<DetailedVoxel*>(scene2->primitives[dvIndex]->clone()));
-    REQUIRE(dv1Copy != nullptr);
-    REQUIRE(dv2Copy != nullptr);
-    validate(*dv1Copy, *dv2Copy);
-
-    std::unique_ptr<Triangle> t1Copy(
-      dynamic_cast<Triangle*>(scene1.primitives[triIndex]->clone()));
-    std::unique_ptr<Triangle> t2Copy(
-      dynamic_cast<Triangle*>(scene2->primitives[triIndex]->clone()));
-    REQUIRE(t1Copy != nullptr);
-    REQUIRE(t2Copy != nullptr);
-    validate(*t1Copy, *t2Copy);
-
-    std::unique_ptr<Voxel> v1Copy(
-      dynamic_cast<Voxel*>(scene1.primitives[vIndex]->clone()));
-    std::unique_ptr<Voxel> v2Copy(
-      dynamic_cast<Voxel*>(scene2->primitives[vIndex]->clone()));
-    REQUIRE(v1Copy != nullptr);
-    REQUIRE(v2Copy != nullptr);
-    validate(*v1Copy, *v2Copy);
-
-    AABB* aabb1 = dynamic_cast<AABB*>(scene1.primitives[aabbIndex]);
-    AABB* aabb2 = dynamic_cast<AABB*>(scene2->primitives[aabbIndex]);
-    REQUIRE(aabb1 != nullptr);
-    REQUIRE(aabb2 != nullptr);
-    validate(*aabb1, *aabb2);
-
-    for (size_t i = 0; i < nRepeats; i++) {
-      std::unique_ptr<DetailedVoxel> dv1Repeat(dynamic_cast<DetailedVoxel*>(
-        scene1.primitives[repeatStart + i]->clone()));
-      std::unique_ptr<DetailedVoxel> dv2Repeat(dynamic_cast<DetailedVoxel*>(
-        scene2->primitives[repeatStart + i]->clone()));
-      REQUIRE(dv1Repeat != nullptr);
-      REQUIRE(dv2Repeat != nullptr);
-      validate(*dv1Repeat, *dv2Repeat);
+    auto& triPart1 = *scene1.parts[0];
+    auto& triPart2 = *scene2->parts[0];
+    REQUIRE(triPart1.primitiveType == triPart2.primitiveType);
+    REQUIRE(triPart1.triangles.size() == triPart2.triangles.size());
+    REQUIRE(triPart1.triangles.vertices.size() ==
+            triPart2.triangles.vertices.size());
+    for (size_t i = 0; i < triPart1.triangles.vertices.size(); ++i) {
+      REQUIRE(triPart1.triangles.vertices[i].pos.x ==
+              triPart2.triangles.vertices[i].pos.x);
+      REQUIRE(triPart1.triangles.vertices[i].pos.y ==
+              triPart2.triangles.vertices[i].pos.y);
+      REQUIRE(triPart1.triangles.vertices[i].pos.z ==
+              triPart2.triangles.vertices[i].pos.z);
     }
+
+    auto& voxelPart1 = *scene1.parts[1];
+    auto& voxelPart2 = *scene2->parts[1];
+    REQUIRE(voxelPart1.primitiveType == voxelPart2.primitiveType);
+    REQUIRE(voxelPart1.voxels.size() == voxelPart2.voxels.size());
+    REQUIRE(voxelPart1.detailed_voxels.size() ==
+            voxelPart2.detailed_voxels.size());
+    for (size_t i = 0; i < voxelPart1.voxels.size(); ++i) {
+      REQUIRE(voxelPart1.voxels.centers[i].pos.x ==
+              voxelPart2.voxels.centers[i].pos.x);
+      REQUIRE(voxelPart1.voxels.centers[i].pos.y ==
+              voxelPart2.voxels.centers[i].pos.y);
+      REQUIRE(voxelPart1.voxels.centers[i].pos.z ==
+              voxelPart2.voxels.centers[i].pos.z);
+      REQUIRE(voxelPart1.voxels.half_size[i] == voxelPart2.voxels.half_size[i]);
+      REQUIRE(voxelPart1.detailed_voxels.present[i] ==
+              voxelPart2.detailed_voxels.present[i]);
+      REQUIRE(voxelPart1.detailed_voxels.int_values[i].size() ==
+              voxelPart2.detailed_voxels.int_values[i].size());
+      REQUIRE(voxelPart1.detailed_voxels.double_values[i].size() ==
+              voxelPart2.detailed_voxels.double_values[i].size());
+      for (size_t j = 0; j < voxelPart1.detailed_voxels.int_values[i].size();
+           ++j) {
+        REQUIRE(voxelPart1.detailed_voxels.int_values[i][j] ==
+                voxelPart2.detailed_voxels.int_values[i][j]);
+      }
+      for (size_t j = 0; j < voxelPart1.detailed_voxels.double_values[i].size();
+           ++j) {
+        REQUIRE(voxelPart1.detailed_voxels.double_values[i][j] ==
+                voxelPart2.detailed_voxels.double_values[i][j]);
+      }
+      REQUIRE(voxelPart1.detailed_voxels.max_pad[i] ==
+              voxelPart2.detailed_voxels.max_pad[i]);
+      if (voxelPart1.voxels.materials[i] != nullptr) {
+        REQUIRE(voxelPart2.voxels.materials[i] != nullptr);
+        REQUIRE(voxelPart1.voxels.materials[i]->ka[0] ==
+                voxelPart2.voxels.materials[i]->ka[0]);
+        REQUIRE(voxelPart1.voxels.materials[i]->ka[1] ==
+                voxelPart2.voxels.materials[i]->ka[1]);
+        REQUIRE(voxelPart1.voxels.materials[i]->ka[2] ==
+                voxelPart2.voxels.materials[i]->ka[2]);
+        REQUIRE(voxelPart1.voxels.materials[i]->ka[3] ==
+                voxelPart2.voxels.materials[i]->ka[3]);
+        REQUIRE(voxelPart1.voxels.materials[i]->ks[0] ==
+                voxelPart2.voxels.materials[i]->ks[0]);
+        REQUIRE(voxelPart1.voxels.materials[i]->ks[1] ==
+                voxelPart2.voxels.materials[i]->ks[1]);
+      } else {
+        REQUIRE(voxelPart2.voxels.materials[i] == nullptr);
+      }
+    }
+
+    REQUIRE(scene1.getAABB() != nullptr);
+    REQUIRE(scene2->getAABB() != nullptr);
+    validate(*scene1.getAABB(), *scene2->getAABB());
+    REQUIRE(scene1.getBBoxCRS() != nullptr);
+    REQUIRE(scene2->getBBoxCRS() != nullptr);
+    validate(*scene1.getBBoxCRS(), *scene2->getBBoxCRS());
 
     delete scene2;
   }

@@ -1,10 +1,8 @@
 #pragma once
 
 #include <assetloading/SwapOnRepeatHandler.h>
-class Primitive;
 class AABB;
 class WavefrontObj;
-struct ScenePartPrimitiveCache;
 
 #include <LadLut.h>
 #include <Vertex.h>
@@ -96,14 +94,6 @@ public:
    * @brief Bulk detailed voxel data (extras aligned to voxels).
    */
   DetailedVoxelBulk detailed_voxels;
-  /**
-   * @brief Vector of pointers to primitives used by this scene part
-   */
-  std::vector<Primitive*> mPrimitives;
-  /**
-   * @brief Cache of non-owning primitive views built from bulk data.
-   */
-  std::unique_ptr<ScenePartPrimitiveCache> primitiveCache;
   /**
    * @brief The centroid of the scene part
    */
@@ -309,21 +299,6 @@ public:
   // ***  GETTERS and SETTERS  *** //
   // ***************************** //
   /**
-   * @brief Obtain the primitives of the scene part
-   * @return Scene part primitives
-   * @see ScenePart::mPrimitives
-   */
-  inline std::vector<Primitive*> const& getPrimitives() const
-  {
-    return mPrimitives;
-  }
-  /**
-   * @brief Set the primitives of the scene part
-   * @param primitives Scene part primitives
-   * @see ScenePart::mPrimitives
-   */
-  void setPrimitives(std::vector<Primitive*> const& primitives);
-  /**
    * @brief Obtain the centroid of the scene part
    * @return Scene part centroid
    * @see ScenePart::centroid
@@ -367,28 +342,9 @@ public:
   }
 
   /**
-   * @brief Clear the primitive views cache and pointers.
-   */
-  void clearPrimitiveCache();
-  /**
-   * @brief Build primitive views from current bulk data.
-   */
-  void buildPrimitiveViewsFromBulk();
-
-  /**
    * @brief Clear all bulk geometry containers.
    */
   void clearBulkData();
-  /**
-   * @brief Populate bulk geometry containers from current primitives.
-   */
-  void buildBulkFromPrimitives();
-  /**
-   * @brief Populate primitives from current bulk geometry containers.
-   *
-   * NOTE: This method deletes current primitives when clearExisting is true.
-   */
-  void buildPrimitivesFromBulk(bool const clearExisting = true);
   /**
    * @brief Update cached bulk values (normals, AABBs) from vertex data.
    */

@@ -31,9 +31,9 @@ def test_finalize_scene():
     part = ScenePart.from_xml("data/scenes/toyblocks/toyblocks_scene.xml", id="0")
 
     scene = StaticScene(scene_parts=[part])
-    assert len(scene._cpp_object.primitives) == 0
+    assert scene._cpp_object.num_primitives == 0
     scene._finalize()
-    assert len(scene._cpp_object.primitives) > 0
+    assert scene._cpp_object.num_primitives > 0
 
 
 def test_scene_invalidation():
@@ -43,9 +43,9 @@ def test_scene_invalidation():
     scene._finalize()
 
     scene.scene_parts = [part, part2]
-    assert len(scene._cpp_object.primitives) == 0
+    assert scene._cpp_object.num_primitives == 0
     scene._finalize()
-    assert len(scene._cpp_object.primitives) > 0
+    assert scene._cpp_object.num_primitives > 0
 
 
 def test_scenepart_from_obj():
@@ -74,7 +74,7 @@ def test_scenepart_from_obj_wrong_axis_argument():
 
 def test_scenepart_from_tiff():
     scene_part = ScenePart.from_tiff("data/sceneparts/tiff/dem_hd.tif")
-    assert len(scene_part._cpp_object.primitives) > 0
+    assert scene_part._cpp_object.num_primitives > 0
 
 
 def test_scenepart_from_tiffs():
@@ -111,10 +111,10 @@ def test_scenepart_from_xyz():
         sparse=False,
     )
 
-    assert len(scene_part1._cpp_object.primitives) > 0
-    assert len(scene_part2._cpp_object.primitives) > 0
-    assert len(scene_part3._cpp_object.primitives) > 0
-    assert len(scene_part4._cpp_object.primitives) > 0
+    assert scene_part1._cpp_object.num_primitives > 0
+    assert scene_part2._cpp_object.num_primitives > 0
+    assert scene_part3._cpp_object.num_primitives > 0
+    assert scene_part4._cpp_object.num_primitives > 0
 
 
 def test_scenepart_from_xyzs():
@@ -153,9 +153,9 @@ def test_scenepart_from_vox():
         "data/sceneparts/syssifoss/F_BR08_08_merged.vox", intersection_mode="scaled"
     )
 
-    assert len(scene_parts1._cpp_object.primitives) > 0
-    assert len(scene_parts2._cpp_object.primitives) > 0
-    assert len(scene_parts3._cpp_object.primitives) > 0
+    assert scene_parts1._cpp_object.num_primitives > 0
+    assert scene_parts2._cpp_object.num_primitives > 0
+    assert scene_parts3._cpp_object.num_primitives > 0
 
     with pytest.raises(ValueError):
         ScenePart.from_vox(

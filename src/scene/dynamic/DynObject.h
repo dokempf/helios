@@ -111,31 +111,6 @@ public:
   {
     setId(id);
   }
-  /**
-   * @brief Dynamic object constructor with primitives as argument
-   * @param primitives The primitives defining the dynamic object
-   * @see DynObject::primitives
-   */
-  DynObject(std::vector<Primitive*> const& primitives)
-    : stepLoop(1, [&]() -> bool { return doSimStep(); })
-    , dynTimeStep(std::numeric_limits<double>::quiet_NaN())
-  {
-    setPrimitives(primitives);
-  }
-  /**
-   * @brief Dynamic object constructor with id and primitives as arguments
-   * @param id The id for the dynamic object
-   * @param primitives The primitives defining the dynamic object
-   * @see DynObject::id
-   * @see DynObject::primitives
-   */
-  DynObject(std::string const id, std::vector<Primitive*> const& primitives)
-    : stepLoop(1, [&]() -> bool { return doSimStep(); })
-    , dynTimeStep(std::numeric_limits<double>::quiet_NaN())
-  {
-    setId(id);
-    setPrimitives(primitives);
-  }
   virtual ~DynObject() = default;
 
   // ***  DYNAMIC BEHAVIOR  *** //

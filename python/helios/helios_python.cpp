@@ -25,7 +25,6 @@
 #include <scanner/ScannerSettings.h>
 #include <scanner/Trajectory.h>
 #include <scene/Scene.h>
-#include <scene/primitives/PrimitiveViews.h>
 #include <sim/comps/Leg.h>
 #include <sim/comps/Survey.h>
 
@@ -298,14 +297,10 @@ PYBIND11_MODULE(_helios, m)
       [](Primitive& prim) { return prim.part.get(); },
       [](Primitive& prim, std::shared_ptr<ScenePart> part) {
         if (!part) {
-          prim.part = nullptr;
+          prim.part.reset();
           return;
         }
-        if (isPrimitiveView(&prim)) {
-          prim.part = std::shared_ptr<ScenePart>(part.get(), [](ScenePart*) {});
-        } else {
-          prim.part = part;
-        }
+        prim.part = part;
       })
     .def_property(
       "material",
@@ -340,22 +335,16 @@ PYBIND11_MODULE(_helios, m)
            return prim.getRayIntersectionDistance(rayOrigin, rayDir);
          })
     .def("update", &Primitive::update)
-    .def("is_triangle",
-         [](Primitive& prim) {
-           return dynamic_cast<Triangle*>(&prim) != nullptr ||
-                  dynamic_cast<TriangleView*>(&prim) != nullptr;
-         })
+    .def(
+      "is_triangle",
+      [](Primitive& prim) { return dynamic_cast<Triangle*>(&prim) != nullptr; })
     .def("is_AABB",
          [](Primitive& prim) { return dynamic_cast<AABB*>(&prim) != nullptr; })
     .def("is_voxel",
-         [](Primitive& prim) {
-           return dynamic_cast<Voxel*>(&prim) != nullptr ||
-                  dynamic_cast<VoxelView*>(&prim) != nullptr;
-         })
+         [](Primitive& prim) { return dynamic_cast<Voxel*>(&prim) != nullptr; })
     .def("is_detailed_voxel",
          [](Primitive& prim) {
-           return dynamic_cast<DetailedVoxel*>(&prim) != nullptr ||
-                  dynamic_cast<DetailedVoxelView*>(&prim) != nullptr;
+           return dynamic_cast<DetailedVoxel*>(&prim) != nullptr;
          })
     .def("clone", &Primitive::clone);
 
@@ -634,15 +623,41 @@ PYBIND11_MODULE(_helios, m)
       return oss.str();
     });
 
+  py::class_<PrimitiveRef> primitive_ref(m, "PrimitiveRef");
+  primitive_ref.def(py::init<>())
+    .def(py::init<ScenePart*, ScenePart::PrimitiveType, PrimitiveIndex>(),
+         py::arg("scene_part"),
+         py::arg("primitive_type"),
+         py::arg("index"))
+    .def_property(
+      "scene_part",
+      [](PrimitiveRef& self) { return self.part; },
+      [](PrimitiveRef& self, std::shared_ptr<ScenePart> part) {
+        self.part = part ? part.get() : nullptr;
+      },
+      py::return_value_policy::reference)
+    .def_readwrite("primitive_type", &PrimitiveRef::type)
+    .def_readwrite("index", &PrimitiveRef::index)
+    .def("is_valid", &PrimitiveRef::isValid);
+
   py::class_<RaySceneIntersection, std::shared_ptr<RaySceneIntersection>>
     ray_scene_intersection(m, "RaySceneIntersection");
   ray_scene_intersection.def(py::init<>())
     .def(py::init<const RaySceneIntersection&>())
     .def_property(
       "primitive",
-      [](RaySceneIntersection& self) { return self.prim; },
-      [](RaySceneIntersection& self, Primitive* prim) { self.prim = prim; },
-      py::return_value_policy::reference)
+      [](RaySceneIntersection& self) -> py::object {
+        if (!self.prim.isValid())
+          return py::none();
+        return py::cast(self.prim);
+      },
+      [](RaySceneIntersection& self, py::object prim) {
+        if (prim.is_none()) {
+          self.prim = PrimitiveRef();
+          return;
+        }
+        self.prim = prim.cast<PrimitiveRef>();
+      })
     .def_property(
       "point",
       [](RaySceneIntersection& self) { return self.point; },
@@ -893,20 +908,55 @@ PYBIND11_MODULE(_helios, m)
     .def_property(
       "is_ground",
       [](const ScenePart& self) {
-        if (self.mPrimitives.empty()) {
-          throw std::runtime_error("It is required to have Primitives in the "
-                                   "ScenePart to get the isGround property.");
+        if (self.primitiveType == ScenePart::PrimitiveType::TRIANGLE) {
+          if (self.triangles.materials.empty() ||
+              !self.triangles.materials[0]) {
+            throw std::runtime_error(
+              "It is required to have triangle materials in the ScenePart to "
+              "get the isGround property.");
+          }
+          return self.triangles.materials[0]->isGround;
         }
-        return self.mPrimitives[0]->material->isGround;
+        if (self.primitiveType == ScenePart::PrimitiveType::VOXEL) {
+          if (self.voxels.materials.empty() || !self.voxels.materials[0]) {
+            throw std::runtime_error(
+              "It is required to have voxel materials in the ScenePart to "
+              "get the isGround property.");
+          }
+          return self.voxels.materials[0]->isGround;
+        }
+        throw std::runtime_error(
+          "It is required to have Primitives in the ScenePart to get the "
+          "isGround property.");
       },
       [](ScenePart& self, bool isGround) {
-        if (self.mPrimitives.empty()) {
-          throw std::runtime_error("It is required to have Primitives in the "
-                                   "ScenePart to set the isGround property.");
+        auto applyIsGround = [&](std::vector<std::shared_ptr<Material>>& mats,
+                                 const char* label) {
+          if (mats.empty()) {
+            std::string msg("It is required to have ");
+            msg += label;
+            msg += " materials in the ScenePart to set the isGround property.";
+            throw std::runtime_error(msg);
+          }
+          for (auto& material : mats) {
+            if (!material) {
+              material = std::make_shared<Material>();
+            }
+            material->isGround = isGround;
+          }
+        };
+
+        if (self.primitiveType == ScenePart::PrimitiveType::TRIANGLE) {
+          applyIsGround(self.triangles.materials, "triangle");
+          return;
         }
-        for (auto& primitive : self.mPrimitives) {
-          primitive->material->isGround = isGround;
+        if (self.primitiveType == ScenePart::PrimitiveType::VOXEL) {
+          applyIsGround(self.voxels.materials, "voxel");
+          return;
         }
+        throw std::runtime_error(
+          "It is required to have Primitives in the ScenePart to set the "
+          "isGround property.");
       })
     .def_property("centroid", &ScenePart::getCentroid, &ScenePart::setCentroid)
     .def_property("id", &ScenePart::getId, &ScenePart::setId)
@@ -946,23 +996,41 @@ PYBIND11_MODULE(_helios, m)
         }
       })
 
-    .def_property(
-      "primitives", &ScenePart::getPrimitives, &ScenePart::setPrimitives)
+    .def_property_readonly("primitives",
+                           [](const ScenePart& self) {
+                             std::vector<PrimitiveRef> refs;
+                             self.appendPrimitiveRefs(refs);
+                             return refs;
+                           })
 
     .def_property_readonly(
       "num_primitives",
-      [](const ScenePart& self) -> size_t { return self.mPrimitives.size(); })
+      [](const ScenePart& self) -> size_t {
+        if (self.primitiveType == ScenePart::PrimitiveType::TRIANGLE)
+          return self.triangles.size();
+        if (self.primitiveType == ScenePart::PrimitiveType::VOXEL)
+          return self.voxels.size();
+        return 0;
+      })
 
-    .def(
-      "primitive",
-      [](ScenePart& self, size_t index) -> Primitive* {
-        if (index < self.mPrimitives.size()) {
-          return self.mPrimitives[index];
-        } else {
-          throw std::out_of_range("Index out of range");
-        }
-      },
-      py::return_value_policy::reference)
+    .def("primitive",
+         [](ScenePart& self, size_t index) -> PrimitiveRef {
+           if (self.primitiveType == ScenePart::PrimitiveType::TRIANGLE) {
+             if (index < self.triangles.size()) {
+               return PrimitiveRef(
+                 &self, ScenePart::PrimitiveType::TRIANGLE, index);
+             }
+             throw std::out_of_range("Index out of range");
+           }
+           if (self.primitiveType == ScenePart::PrimitiveType::VOXEL) {
+             if (index < self.voxels.size()) {
+               return PrimitiveRef(
+                 &self, ScenePart::PrimitiveType::VOXEL, index);
+             }
+             throw std::out_of_range("Index out of range");
+           }
+           throw std::out_of_range("ScenePart has no primitives");
+         })
     .def_property_readonly("all_vertices", &ScenePart::getAllVertices)
     .def("isDynamicMovingObject",
          [](const ScenePart& self) -> bool {
@@ -1068,7 +1136,8 @@ PYBIND11_MODULE(_helios, m)
     .def(py::init<Scene&>(), py::arg("scene"))
 
     .def_readwrite("scene_parts", &Scene::parts)
-    .def_readwrite("primitives", &Scene::primitives)
+    .def_property_readonly("primitives",
+                           [](const Scene& self) { return self.primitives; })
 
     .def_property("bbox", &Scene::getBBox, &Scene::setBBox)
     .def_property("bbox_crs", &Scene::getBBoxCRS, &Scene::setBBoxCRS)
@@ -1076,7 +1145,7 @@ PYBIND11_MODULE(_helios, m)
       "kd_grove_factory", &Scene::getKDGroveFactory, &Scene::setKDGroveFactory)
     .def_property_readonly(
       "num_primitives",
-      [](const ScenePart& self) -> size_t { return self.mPrimitives.size(); })
+      [](const Scene& self) -> size_t { return self.primitives.size(); })
     .def_property_readonly(
       "aabb", &Scene::getAABB, py::return_value_policy::reference)
 
@@ -1113,42 +1182,45 @@ PYBIND11_MODULE(_helios, m)
     .def("translate",
          [](Scene& scene, double x, double y, double z) {
            glm::dvec3 shift(x, y, z);
-           for (Primitive* p : scene.primitives) {
-             p->translate(shift);
+           for (auto const& part : scene.parts) {
+             if (!part)
+               continue;
+             if (part->primitiveType == ScenePart::PrimitiveType::TRIANGLE) {
+               for (Vertex& v : part->triangles.vertices) {
+                 v.pos = v.pos + shift;
+               }
+               part->updateBulk();
+             } else if (part->primitiveType ==
+                        ScenePart::PrimitiveType::VOXEL) {
+               for (Vertex& v : part->voxels.centers) {
+                 v.pos = v.pos + shift;
+               }
+               part->updateBulk();
+             }
            }
          })
-    .def(
-      "new_triangle",
-      [](Scene& scene) {
-        Vertex v;
-        v.pos[0] = 0.0;
-        v.pos[1] = 0.0;
-        v.pos[2] = 0.0;
-        Triangle* tri = new Triangle(v, v, v);
-        scene.primitives.push_back(tri);
-        return tri;
-      },
-      py::return_value_policy::reference)
-    .def(
-      "new_detailed_voxel",
-      [](Scene& scene) {
-        std::vector<int> vi({ 0, 0 });
-        std::vector<double> vd({ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 });
-        DetailedVoxel* dv = new DetailedVoxel(0.0, 0.0, 0.0, 0.5, vi, vd);
-        scene.primitives.push_back(dv);
-        return dv;
-      },
-      py::return_value_policy::reference)
-    .def(
-      "primitive",
-      [](Scene& scene, size_t index) -> Primitive* {
-        if (index < scene.primitives.size()) {
-          return scene.primitives[index];
-        } else {
-          throw std::out_of_range("Index out of range");
-        }
-      },
-      py::return_value_policy::reference)
+    .def("new_triangle",
+         [](Scene&) {
+           Vertex v;
+           v.pos[0] = 0.0;
+           v.pos[1] = 0.0;
+           v.pos[2] = 0.0;
+           return std::make_shared<Triangle>(v, v, v);
+         })
+    .def("new_detailed_voxel",
+         [](Scene&) {
+           std::vector<int> vi({ 0, 0 });
+           std::vector<double> vd({ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 });
+           return std::make_shared<DetailedVoxel>(0.0, 0.0, 0.0, 0.5, vi, vd);
+         })
+    .def("primitive",
+         [](Scene& scene, size_t index) -> PrimitiveRef {
+           if (index < scene.primitives.size()) {
+             return scene.primitives[index];
+           } else {
+             throw std::out_of_range("Index out of range");
+           }
+         })
     .def("build_kd_grove", &Scene::buildKDGroveWithLog, py::arg("safe") = true)
     .def("intersection_min_max",
          py::overload_cast<std::vector<double> const&,
@@ -1821,6 +1893,9 @@ PYBIND11_MODULE(_helios, m)
           paths.cast<std::vector<std::string>>();
         self.allOutputPaths =
           std::make_shared<std::vector<std::string>>(cpp_paths);
+        if (!self.allMeasurementsMutex) {
+          self.allMeasurementsMutex = std::make_shared<std::mutex>();
+        }
       })
     .def_property(
       "all_measurements",
@@ -1834,6 +1909,9 @@ PYBIND11_MODULE(_helios, m)
         std::vector<Measurement> vec = detail::numpy_to_measurements(arr);
         self.allMeasurements =
           std::make_shared<std::vector<Measurement>>(std::move(vec));
+        if (!self.allMeasurementsMutex) {
+          self.allMeasurementsMutex = std::make_shared<std::mutex>();
+        }
       })
     .def_property(
       "all_trajectories",
@@ -1846,6 +1924,9 @@ PYBIND11_MODULE(_helios, m)
         std::vector<Trajectory> vec = detail::numpy_to_trajectories(arr);
         self.allTrajectories =
           std::make_shared<std::vector<Trajectory>>(std::move(vec));
+        if (!self.allMeasurementsMutex) {
+          self.allMeasurementsMutex = std::make_shared<std::mutex>();
+        }
       })
     .def_property(
       "cycle_measurements",
@@ -1858,6 +1939,9 @@ PYBIND11_MODULE(_helios, m)
         std::vector<Measurement> vec = detail::numpy_to_measurements(arr);
         self.cycleMeasurements =
           std::make_shared<std::vector<Measurement>>(std::move(vec));
+        if (!self.cycleMeasurementsMutex) {
+          self.cycleMeasurementsMutex = std::make_shared<std::mutex>();
+        }
       })
     .def_property(
       "cycle_trajectories",
@@ -1870,6 +1954,9 @@ PYBIND11_MODULE(_helios, m)
         std::vector<Trajectory> vec = detail::numpy_to_trajectories(arr);
         self.cycleTrajectories =
           std::make_shared<std::vector<Trajectory>>(std::move(vec));
+        if (!self.cycleMeasurementsMutex) {
+          self.cycleMeasurementsMutex = std::make_shared<std::mutex>();
+        }
       })
 
     .def_property("num_rays",

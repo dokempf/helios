@@ -172,27 +172,6 @@ public:
     , observerDynTimeStep(std::numeric_limits<double>::quiet_NaN())
   {
   }
-  /**
-   * @see DynObject::DynObject(vector<Primitive *> const &)
-   */
-  DynMovingObject(std::vector<Primitive*> const& primitives)
-    : DynObject(primitives)
-    , kdGroveObserver(nullptr)
-    , observerStepLoop(1, [&]() -> void { doObserverUpdate(); })
-    , observerDynTimeStep(std::numeric_limits<double>::quiet_NaN())
-  {
-  }
-  /**
-   * @see DynObject::DynObject(string const, vector<Primitive *> const &)
-   */
-  DynMovingObject(std::string const id,
-                  std::vector<Primitive*> const& primitives)
-    : DynObject(id, primitives)
-    , kdGroveObserver(nullptr)
-    , observerStepLoop(1, [&]() -> void { doObserverUpdate(); })
-    , observerDynTimeStep(std::numeric_limits<double>::quiet_NaN())
-  {
-  }
   virtual ~DynMovingObject() = default;
 
   // ***  DYNAMIC BEHAVIOR  *** //

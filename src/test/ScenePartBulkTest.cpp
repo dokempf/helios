@@ -3,10 +3,7 @@
 
 #include <ScenePart.h>
 
-#include <DetailedVoxel.h>
 #include <Material.h>
-#include <Triangle.h>
-#include <Voxel.h>
 
 #include <cmath>
 #include <memory>
@@ -23,19 +20,12 @@ TEST_CASE("ScenePart: buildBulkFromPrimitives (triangles)")
   Vertex a0(0.0, 0.0, 0.0);
   Vertex a1(1.0, 0.0, 0.0);
   Vertex a2(0.0, 1.0, 0.0);
-  Triangle* t0 = new Triangle(a0, a1, a2);
-  t0->material = mat0;
+  appendTriangleBulk(sp.triangles, a0, a1, a2, mat0);
 
   Vertex b0(0.0, 0.0, 1.0);
   Vertex b1(1.0, 0.0, 1.0);
   Vertex b2(0.0, 1.0, 1.0);
-  Triangle* t1 = new Triangle(b0, b1, b2);
-  t1->material = mat1;
-
-  sp.mPrimitives.push_back(t0);
-  sp.mPrimitives.push_back(t1);
-
-  sp.buildBulkFromPrimitives();
+  appendTriangleBulk(sp.triangles, b0, b1, b2, mat1);
 
   REQUIRE(sp.triangles.size() == 2);
   REQUIRE(sp.triangles.vertices.size() == 6);
@@ -63,9 +53,6 @@ TEST_CASE("ScenePart: buildBulkFromPrimitives (triangles)")
   CHECK(sp.triangles.aabb_max[0].x == Catch::Approx(1.0));
   CHECK(sp.triangles.aabb_max[0].y == Catch::Approx(1.0));
   CHECK(sp.triangles.aabb_max[0].z == Catch::Approx(0.0));
-
-  delete t0;
-  delete t1;
 }
 
 TEST_CASE("ScenePart: buildBulkFromPrimitives (voxels)")
@@ -76,25 +63,28 @@ TEST_CASE("ScenePart: buildBulkFromPrimitives (voxels)")
   auto mat0 = std::make_shared<Material>();
   auto mat1 = std::make_shared<Material>();
 
-  Voxel* v0 = new Voxel(glm::dvec3(1.0, 2.0, 3.0), 2.0);
-  v0->numPoints = 7;
-  v0->r = 0.1;
-  v0->g = 0.2;
-  v0->b = 0.3;
-  v0->color = Color4f(0.4f, 0.5f, 0.6f, 0.7f);
-  v0->material = mat0;
+  appendVoxelBulk(sp.voxels,
+                  Vertex(1.0, 2.0, 3.0),
+                  1.0,
+                  7,
+                  0.1,
+                  0.2,
+                  0.3,
+                  Color4f(0.4f, 0.5f, 0.6f, 0.7f),
+                  mat0);
 
   std::vector<int> intValues = { 3, 4 };
   std::vector<double> doubleValues = { 1.5, 2.5, 3.5 };
-  DetailedVoxel* dv1 =
-    new DetailedVoxel(4.0, 5.0, 6.0, 1.5, intValues, doubleValues);
-  dv1->setMaxPad(9.0);
-  dv1->material = mat1;
-
-  sp.mPrimitives.push_back(v0);
-  sp.mPrimitives.push_back(dv1);
-
-  sp.buildBulkFromPrimitives();
+  appendVoxelBulk(
+    sp.voxels, Vertex(4.0, 5.0, 6.0), 1.5, 0, 0.0, 0.0, 0.0, Color4f(), mat1);
+  sp.detailed_voxels.present.push_back(0);
+  sp.detailed_voxels.int_values.emplace_back();
+  sp.detailed_voxels.double_values.emplace_back();
+  sp.detailed_voxels.max_pad.push_back(0.0);
+  sp.detailed_voxels.present.push_back(1);
+  sp.detailed_voxels.int_values.push_back(intValues);
+  sp.detailed_voxels.double_values.push_back(doubleValues);
+  sp.detailed_voxels.max_pad.push_back(9.0);
 
   REQUIRE(sp.voxels.size() == 2);
   REQUIRE(sp.detailed_voxels.size() == 2);
@@ -127,7 +117,4 @@ TEST_CASE("ScenePart: buildBulkFromPrimitives (voxels)")
   CHECK(sp.detailed_voxels.double_values[1][2] == Catch::Approx(3.5));
   CHECK(sp.detailed_voxels.max_pad[1] == Catch::Approx(9.0));
   CHECK(sp.voxels.materials[1] == mat1);
-
-  delete v0;
-  delete dv1;
 }

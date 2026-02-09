@@ -9,6 +9,8 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
 
+#include <scene/primitives/PrimitiveAccessor.h>
+
 SpectralLibrary::SpectralLibrary(float wavelength_m,
                                  std::vector<std::string> assetsDir,
                                  const std::string spectra)
@@ -115,37 +117,37 @@ SpectralLibrary::setReflectances(Scene* scene)
 {
   std::set<std::string> matsMissing;
 
-  for (Primitive* prim : scene->primitives) {
-    if (!isnan(prim->material->reflectance)) {
+  for (PrimitiveRef const& ref : scene->primitives) {
+    std::shared_ptr<Material> mat = PrimitiveAccessor::getMaterial(ref);
+    if (mat == nullptr)
+      continue;
+    if (!isnan(mat->reflectance)) {
       continue; // if a reflectance was set, this has precedence over spectra
     }
 
-    prim->material->reflectance =
+    mat->reflectance =
       defaultReflectance; // otherwise, set the default reflectance
 
-    if (prim->material->spectra.empty()) {
-      if (matsMissing.find(prim->material->spectra) == matsMissing.end()) {
-        matsMissing.insert(prim->material->spectra);
-        logging::WARN("Warning: material " + prim->material->name +
-                      " of primitive " + typeid(*prim).name() + " (" +
-                      prim->material->matFilePath +
+    if (mat->spectra.empty()) {
+      if (matsMissing.find(mat->spectra) == matsMissing.end()) {
+        matsMissing.insert(mat->spectra);
+        logging::WARN("Warning: material " + mat->name + " of primitive (" +
+                      std::to_string(ref.index) + ") (" + mat->matFilePath +
                       ") has no spectral definition");
       }
       continue;
     }
 
-    if (reflectanceMap.find(prim->material->spectra) == reflectanceMap.end()) {
-      if (matsMissing.find(prim->material->spectra) == matsMissing.end()) {
-        matsMissing.insert(prim->material->spectra);
-        logging::WARN("Warning: spectra " + prim->material->spectra + " (" +
-                      prim->material->matFilePath +
-                      ") is not in the spectral library");
+    if (reflectanceMap.find(mat->spectra) == reflectanceMap.end()) {
+      if (matsMissing.find(mat->spectra) == matsMissing.end()) {
+        matsMissing.insert(mat->spectra);
+        logging::WARN("Warning: spectra " + mat->spectra + " (" +
+                      mat->matFilePath + ") is not in the spectral library");
       }
       continue;
     }
 
-    prim->material->reflectance =
-      reflectanceMap.find(prim->material->spectra)->second;
-    prim->material->setSpecularity();
+    mat->reflectance = reflectanceMap.find(mat->spectra)->second;
+    mat->setSpecularity();
   }
 }

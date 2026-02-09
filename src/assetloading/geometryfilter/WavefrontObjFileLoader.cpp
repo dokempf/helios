@@ -107,9 +107,6 @@ WavefrontObjFileLoader::run()
   ss << "# total primitives loaded: " << primsOut->triangles.size();
   logging::DEBUG(ss.str());
 
-  // Build primitive views
-  primsOut->buildPrimitiveViewsFromBulk();
-
   // Return
   return primsOut;
 }

@@ -8,6 +8,9 @@
 
 #include <memory>
 #include <string>
+#include <vector>
+
+class ScenePart;
 
 /**
  * @author Alberto M. Esmoris Pena
@@ -26,6 +29,12 @@ protected:
    * @see KDGroveStats
    */
   std::shared_ptr<KDGroveStats> stats;
+  /**
+   * @brief Owns scene parts referenced by KDTree primitive refs.
+   *
+   * This keeps merged or temporary parts alive for the grove lifetime.
+   */
+  std::vector<std::shared_ptr<ScenePart>> ownedParts;
 
 public:
   // ***  CONSTRUCTION / DESTRUCTION  *** //
@@ -109,5 +118,19 @@ public:
   virtual void setStats(std::shared_ptr<KDGroveStats> stats)
   {
     this->stats = stats;
+  }
+  /**
+   * @brief Retain ownership of scene parts used to build trees.
+   */
+  virtual void setOwnedParts(std::vector<std::shared_ptr<ScenePart>> parts)
+  {
+    ownedParts = std::move(parts);
+  }
+  /**
+   * @brief Access owned scene parts.
+   */
+  virtual std::vector<std::shared_ptr<ScenePart>> const& getOwnedParts() const
+  {
+    return ownedParts;
   }
 };

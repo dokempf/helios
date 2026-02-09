@@ -81,25 +81,47 @@ VHSimpleCanvas::renderNormals(VHStaticObjectAdapter& staticObj)
 {
   if (!staticObj.isRenderingNormals())
     return;
-  vector<Primitive*> const primitives =
-    staticObj.getStaticObj().getPrimitives();
-  for (size_t i = 0; i < primitives.size(); ++i) {
-    Primitive* primitive = primitives[i];
+  ScenePart& sp = staticObj.getStaticObj();
+  size_t numPrims = 0;
+  if (sp.getPrimitiveType() == ScenePart::PrimitiveType::TRIANGLE)
+    numPrims = sp.triangles.size();
+  else if (sp.getPrimitiveType() == ScenePart::PrimitiveType::VOXEL)
+    numPrims = sp.voxels.size();
+  for (size_t i = 0; i < numPrims; ++i) {
     float nx = 0;
     float ny = 0;
     float nz = 0;
     pcl::PointXYZ p, q;
-    Vertex* vertices = primitive->getVertices();
-    float const numVerticesf = (float)primitive->getNumVertices();
-    for (size_t j = 0; j < primitive->getNumVertices(); ++j) {
-      Vertex& vertex = vertices[j];
+    size_t numVertices = 0;
+    if (sp.getPrimitiveType() == ScenePart::PrimitiveType::TRIANGLE) {
+      size_t const base = 3 * i;
+      if (base + 2 >= sp.triangles.vertices.size())
+        continue;
+      for (size_t j = 0; j < 3; ++j) {
+        Vertex& vertex = sp.triangles.vertices[base + j];
+        nx += vertex.normal.x;
+        ny += vertex.normal.y;
+        nz += vertex.normal.z;
+        p.x += vertex.pos.x;
+        p.y += vertex.pos.y;
+        p.z += vertex.pos.z;
+      }
+      numVertices = 3;
+    } else if (sp.getPrimitiveType() == ScenePart::PrimitiveType::VOXEL) {
+      if (i >= sp.voxels.centers.size())
+        continue;
+      Vertex& vertex = sp.voxels.centers[i];
       nx += vertex.normal.x;
       ny += vertex.normal.y;
       nz += vertex.normal.z;
       p.x += vertex.pos.x;
       p.y += vertex.pos.y;
       p.z += vertex.pos.z;
+      numVertices = 1;
     }
+    if (numVertices == 0)
+      continue;
+    float const numVerticesf = (float)numVertices;
     nx /= numVerticesf;
     ny /= numVerticesf;
     nz /= numVerticesf;
@@ -123,8 +145,13 @@ VHSimpleCanvas::unrenderAllNormals()
   for (shared_ptr<VHDynObjectXYZRGBAdapter> const& dynObj : dynObjs) {
     if (!dynObj->isRenderingNormals())
       continue; // Skip, nothing to remove
-    vector<Primitive*> const primitives = dynObj->getDynObj().getPrimitives();
-    for (size_t i = 0; i < primitives.size(); ++i) {
+    ScenePart& sp = dynObj->getDynObj();
+    size_t numPrims = 0;
+    if (sp.getPrimitiveType() == ScenePart::PrimitiveType::TRIANGLE)
+      numPrims = sp.triangles.size();
+    else if (sp.getPrimitiveType() == ScenePart::PrimitiveType::VOXEL)
+      numPrims = sp.voxels.size();
+    for (size_t i = 0; i < numPrims; ++i) {
       std::stringstream ss;
       ss << dynObj->getId() << "_normal" << i;
       viewer->removeShape(ss.str());

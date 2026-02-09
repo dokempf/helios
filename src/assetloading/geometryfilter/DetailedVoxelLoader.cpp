@@ -53,9 +53,6 @@ DetailedVoxelLoader::run()
   // Load ladlut if any
   loadLadlut();
 
-  // Build primitive views
-  primsOut->buildPrimitiveViewsFromBulk();
-
   // Return detailed voxels as ScenePart *
   return primsOut;
 }

@@ -9,7 +9,6 @@
 #include <logging.hpp>
 #include <platform/InterpolatedMovingPlatformEgg.h>
 #include <scanner/beamDeflector/PolygonMirrorBeamDeflector.h>
-#include <scene/primitives/PrimitiveViews.h>
 
 #include <boost/algorithm/string.hpp>
 #include <boost/filesystem.hpp>
@@ -90,21 +89,20 @@ XmlSurveyLoader::createSurveyFromXml(tinyxml2::XMLElement* surveyNode,
     if (sp->sorh == nullptr)
       continue;
     // Update material for each primitive
-    size_t const numPrimitives = sp->mPrimitives.size();
-    std::vector<Primitive*>& baselinePrimitives =
-      sp->sorh->getBaselinePrimitives();
-    size_t const n = std::min(numPrimitives, baselinePrimitives.size());
-    for (size_t i = 0; i < n; ++i) {
-      std::shared_ptr<Material> mat = sp->mPrimitives[i]->material;
-      baselinePrimitives[i]->material = mat;
-      if (auto* tv = dynamic_cast<TriangleView*>(baselinePrimitives[i])) {
-        if (tv->owner != nullptr &&
-            tv->index < tv->owner->triangles.materials.size())
-          tv->owner->triangles.materials[tv->index] = mat;
-      } else if (auto* vv = dynamic_cast<VoxelView*>(baselinePrimitives[i])) {
-        if (vv->owner != nullptr &&
-            vv->index < vv->owner->voxels.materials.size())
-          vv->owner->voxels.materials[vv->index] = mat;
+    ScenePart* baseline = sp->sorh->getBaseline();
+    if (baseline == nullptr)
+      continue;
+    if (sp->primitiveType == ScenePart::PrimitiveType::TRIANGLE) {
+      size_t const n = std::min(sp->triangles.materials.size(),
+                                baseline->triangles.materials.size());
+      for (size_t i = 0; i < n; ++i) {
+        baseline->triangles.materials[i] = sp->triangles.materials[i];
+      }
+    } else if (sp->primitiveType == ScenePart::PrimitiveType::VOXEL) {
+      size_t const n = std::min(sp->voxels.materials.size(),
+                                baseline->voxels.materials.size());
+      for (size_t i = 0; i < n; ++i) {
+        baseline->voxels.materials[i] = sp->voxels.materials[i];
       }
     }
   }

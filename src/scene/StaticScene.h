@@ -103,6 +103,10 @@ public:
   inline void setStaticObject(std::size_t const index,
                               std::shared_ptr<ScenePart> obj)
   {
+    if (index >= staticObjs.size()) {
+      staticObjs.push_back(obj);
+      return;
+    }
     staticObjs[index] = obj;
   }
   /**
@@ -111,6 +115,8 @@ public:
    */
   inline void removeStaticObject(std::size_t const index)
   {
+    if (index >= staticObjs.size())
+      return;
     staticObjs.erase(staticObjs.begin() + index);
   }
   /**

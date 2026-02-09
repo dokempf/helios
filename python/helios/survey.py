@@ -151,11 +151,9 @@ class Survey(Model, cpp_class=_helios.Survey):
 
         self.scanner._cpp_object.cycle_measurements = np.empty((0,), dtype=meas_dtype)
         self.scanner._cpp_object.cycle_trajectories = np.empty((0,), dtype=traj_dtype)
-        self.scanner._cpp_object.cycle_measurements_mutex = None
         self.scanner._cpp_object.all_measurements = np.empty((0,), dtype=meas_dtype)
         self.scanner._cpp_object.all_trajectories = np.empty((0,), dtype=traj_dtype)
         self.scanner._cpp_object.all_output_paths = np.empty((0,))
-        self.scanner._cpp_object.all_measurements_mutex = None
         # Start simulating the survey
         playback.start()
 

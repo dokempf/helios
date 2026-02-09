@@ -208,6 +208,9 @@ KDGroveFactory::makeCommon(std::vector<std::shared_ptr<ScenePart>> parts,
       logging::INFO(kdgrove->getStats()->toString());
   }
 
+  // Keep scene parts alive for the lifetime of the grove.
+  kdgrove->setOwnedParts(std::move(parts));
+
   // Return built kdgrove
   return kdgrove;
 }
@@ -238,8 +241,68 @@ KDGroveFactory::makeMergeNonMoving(
 {
   // Prepare merged non moving scene parts
   std::vector<std::shared_ptr<ScenePart>> parts;
-  std::vector<Primitive*> mergedTriangles;
-  std::vector<Primitive*> mergedVoxels;
+  TriangleBulk mergedTriangles;
+  VoxelBulk mergedVoxels;
+  DetailedVoxelBulk mergedDetailed;
+
+  auto appendTriangleBulk = [](TriangleBulk& dst, TriangleBulk const& src) {
+    dst.vertices.insert(
+      dst.vertices.end(), src.vertices.begin(), src.vertices.end());
+    dst.face_normal.insert(
+      dst.face_normal.end(), src.face_normal.begin(), src.face_normal.end());
+    dst.e1.insert(dst.e1.end(), src.e1.begin(), src.e1.end());
+    dst.e2.insert(dst.e2.end(), src.e2.begin(), src.e2.end());
+    dst.v0.insert(dst.v0.end(), src.v0.begin(), src.v0.end());
+    dst.eps.insert(dst.eps.end(), src.eps.begin(), src.eps.end());
+    dst.aabb_min.insert(
+      dst.aabb_min.end(), src.aabb_min.begin(), src.aabb_min.end());
+    dst.aabb_max.insert(
+      dst.aabb_max.end(), src.aabb_max.begin(), src.aabb_max.end());
+    dst.materials.insert(
+      dst.materials.end(), src.materials.begin(), src.materials.end());
+  };
+
+  auto appendVoxelBulk = [](VoxelBulk& dst, VoxelBulk const& src) {
+    dst.centers.insert(
+      dst.centers.end(), src.centers.begin(), src.centers.end());
+    dst.half_size.insert(
+      dst.half_size.end(), src.half_size.begin(), src.half_size.end());
+    dst.num_points.insert(
+      dst.num_points.end(), src.num_points.begin(), src.num_points.end());
+    dst.r.insert(dst.r.end(), src.r.begin(), src.r.end());
+    dst.g.insert(dst.g.end(), src.g.begin(), src.g.end());
+    dst.b.insert(dst.b.end(), src.b.begin(), src.b.end());
+    dst.color.insert(dst.color.end(), src.color.begin(), src.color.end());
+    dst.aabb_min.insert(
+      dst.aabb_min.end(), src.aabb_min.begin(), src.aabb_min.end());
+    dst.aabb_max.insert(
+      dst.aabb_max.end(), src.aabb_max.begin(), src.aabb_max.end());
+    dst.materials.insert(
+      dst.materials.end(), src.materials.begin(), src.materials.end());
+  };
+
+  auto appendDetailedBulk = [](DetailedVoxelBulk& dst,
+                               DetailedVoxelBulk const& src,
+                               std::size_t count) {
+    if (src.present.size() == count) {
+      dst.present.insert(
+        dst.present.end(), src.present.begin(), src.present.end());
+      dst.int_values.insert(
+        dst.int_values.end(), src.int_values.begin(), src.int_values.end());
+      dst.double_values.insert(dst.double_values.end(),
+                               src.double_values.begin(),
+                               src.double_values.end());
+      dst.max_pad.insert(
+        dst.max_pad.end(), src.max_pad.begin(), src.max_pad.end());
+      return;
+    }
+    for (std::size_t i = 0; i < count; ++i) {
+      dst.present.push_back(0);
+      dst.int_values.emplace_back();
+      dst.double_values.emplace_back();
+      dst.max_pad.push_back(0.0);
+    }
+  };
   for (std::shared_ptr<ScenePart> part : _parts) {
     // Consider moving objects directly
     if (part->getType() == ScenePart::ObjectType::DYN_MOVING_OBJECT) {
@@ -247,32 +310,18 @@ KDGroveFactory::makeMergeNonMoving(
       continue;
     }
 
-    std::vector<Primitive*> const& partPrimitives = part->getPrimitives();
-    if (partPrimitives.empty()) {
-      parts.push_back(part);
-      continue;
-    }
-
-    // Extract primitives from non moving objects.
-    // Use clones to avoid invalidating primitives owned by the original parts.
+    // Extract bulk data from non moving objects.
     if (part->primitiveType == ScenePart::PrimitiveType::TRIANGLE) {
-      for (Primitive* primitive : partPrimitives) {
-        if (primitive == nullptr)
-          continue;
-        Primitive* clone = primitive->clone();
-        if (clone != nullptr)
-          mergedTriangles.push_back(clone);
-      }
+      if (!part->triangles.vertices.empty())
+        appendTriangleBulk(mergedTriangles, part->triangles);
       continue;
     }
 
     if (part->primitiveType == ScenePart::PrimitiveType::VOXEL) {
-      for (Primitive* primitive : partPrimitives) {
-        if (primitive == nullptr)
-          continue;
-        Primitive* clone = primitive->clone();
-        if (clone != nullptr)
-          mergedVoxels.push_back(clone);
+      if (!part->voxels.centers.empty()) {
+        appendVoxelBulk(mergedVoxels, part->voxels);
+        appendDetailedBulk(
+          mergedDetailed, part->detailed_voxels, part->voxels.size());
       }
       continue;
     }
@@ -282,16 +331,19 @@ KDGroveFactory::makeMergeNonMoving(
   }
 
   // Insert merged scene part, if any
-  if (!mergedTriangles.empty()) {
+  if (!mergedTriangles.vertices.empty()) {
     std::shared_ptr<ScenePart> mergedPart = std::make_shared<ScenePart>();
     mergedPart->primitiveType = ScenePart::PrimitiveType::TRIANGLE;
-    mergedPart->setPrimitives(mergedTriangles);
+    mergedPart->triangles = std::move(mergedTriangles);
+    mergedPart->subpartLimit.push_back(mergedPart->triangles.size());
     parts.push_back(mergedPart);
   }
-  if (!mergedVoxels.empty()) {
+  if (!mergedVoxels.centers.empty()) {
     std::shared_ptr<ScenePart> mergedPart = std::make_shared<ScenePart>();
     mergedPart->primitiveType = ScenePart::PrimitiveType::VOXEL;
-    mergedPart->setPrimitives(mergedVoxels);
+    mergedPart->voxels = std::move(mergedVoxels);
+    mergedPart->detailed_voxels = std::move(mergedDetailed);
+    mergedPart->subpartLimit.push_back(mergedPart->voxels.size());
     parts.push_back(mergedPart);
   }
 

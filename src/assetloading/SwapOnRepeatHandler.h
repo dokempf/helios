@@ -1,6 +1,5 @@
 #pragma once
 
-class Primitive;
 class ScenePart;
 class AbstractGeometryFilter;
 
@@ -201,13 +200,10 @@ public:
    */
   void pushTimeToLive(int const timeToLive);
   /**
-   * @brief Obtain a vector of pointers to the primitives representing the
-   *  baseline of the handler.
-   * @return Vector of pointers to the primitives representing the handler's
-   *  baseline.
-   * @see SwapOnRepeatHandler::mPrimitives
+   * @brief Obtain the baseline scene part for this handler.
+   * @return Pointer to the baseline ScenePart, or nullptr if none.
    */
-  std::vector<Primitive*>& getBaselinePrimitives();
+  inline ScenePart* getBaseline() const { return baseline.get(); }
   /**
    * @brief Set the keepCRS flag.
    * @param keepCRS The new keepCRS flag for the handler.

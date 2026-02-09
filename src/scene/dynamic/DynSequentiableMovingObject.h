@@ -70,21 +70,6 @@ public:
     : DynMovingObject(id)
   {
   }
-  /**
-   * @see DynMovingObject::DynMovingObject(std::vector<Primitive *> const &)
-   */
-  DynSequentiableMovingObject(std::vector<Primitive*> const& primitives)
-    : DynMovingObject(primitives)
-  {
-  }
-  /**
-   * @see DynMovingObject(string const, vector<Primitive *> const &)
-   */
-  DynSequentiableMovingObject(std::string const id,
-                              std::vector<Primitive*> const& primitives)
-    : DynMovingObject(id, primitives)
-  {
-  }
   virtual ~DynSequentiableMovingObject() = default;
 
   // ***  DYNAMIC BEHAVIOR  *** //

@@ -14,6 +14,7 @@
 #include <maths/RayUtils.h>
 #include <scanner/Scanner.h>
 #include <scanner/detector/FullWaveform.h>
+#include <scene/primitives/PrimitiveAccessor.h>
 
 #if DATA_ANALYTICS >= 2
 #include <dataanalytics/HDA_GlobalVars.h>
@@ -216,15 +217,18 @@ FullWaveformPulseRunnable::handleSubray(
     shared_ptr<RaySceneIntersection> intersect =
       findIntersection(tMinMax, subrayOrigin, subrayDirection);
 
-    if (intersect != nullptr && intersect->prim != nullptr) {
+    if (intersect != nullptr && intersect->prim.isValid()) {
 #if DATA_ANALYTICS >= 2
       HDA_GV.incrementSubrayIntersectionCount();
       subrayHit = true;
 #endif
       // Incidence angle:
       if (!scanner->isFixedIncidenceAngle()) {
-        incidenceAngle = intersect->prim->getIncidenceAngle_rad(
-          pulse.getOriginRef(), subrayDirection, intersect->point);
+        incidenceAngle =
+          PrimitiveAccessor::getIncidenceAngle_rad(intersect->prim,
+                                                   pulse.getOriginRef(),
+                                                   subrayDirection,
+                                                   intersect->point);
       }
 
       // Distance between beam origin and intersection:
@@ -236,10 +240,10 @@ FullWaveformPulseRunnable::handleSubray(
 
       // Distance between beam's center line and intersection point:
       double intensity = 0.0;
-      if (intersect->prim->canComputeSigmaWithLadLut()) {
+      if (PrimitiveAccessor::canComputeSigmaWithLadLut(intersect->prim)) {
         // LadLut based intensity computation
-        double const sigma =
-          intersect->prim->computeSigmaWithLadLut(subrayDirection);
+        double const sigma = PrimitiveAccessor::computeSigmaWithLadLut(
+          intersect->prim, subrayDirection);
         intensity = scanner->calcIntensity(
           distance, sigma, subrayRadiusStep, pulse.getDeviceIndex());
       } else {
@@ -247,9 +251,14 @@ FullWaveformPulseRunnable::handleSubray(
 #if DATA_ANALYTICS >= 2
         HDA_GV.incrementIntensityComputationsCount();
 #endif
+        std::shared_ptr<Material> mat =
+          PrimitiveAccessor::getMaterial(intersect->prim);
+        if (mat == nullptr) {
+          continue;
+        }
         intensity = scanner->calcIntensity(incidenceAngle,
                                            distance,
-                                           *intersect->prim->material,
+                                           *mat,
                                            subrayRadiusStep,
                                            pulse.getDeviceIndex()
 #if DATA_ANALYTICS >= 2
@@ -260,16 +269,18 @@ FullWaveformPulseRunnable::handleSubray(
       }
 
       // Intersection handling
-      if (intersect->prim->canHandleIntersections()) {
+      if (PrimitiveAccessor::canHandleIntersections(intersect->prim)) {
+        AABB aabb = PrimitiveAccessor::getAABB(intersect->prim);
         glm::dvec3 outsideIntersectionPoint =
           RayUtils::obtainPointAfterTraversing(
-            *intersect->prim->getAABB(), subrayOrigin, subrayDirection, 0.0);
+            aabb, subrayOrigin, subrayDirection, 0.0);
         IntersectionHandlingResult ihr =
-          intersect->prim->onRayIntersection(intersectionHandlingNoiseSource,
-                                             subrayDirection,
-                                             intersect->point,
-                                             outsideIntersectionPoint,
-                                             intensity);
+          PrimitiveAccessor::onRayIntersection(intersect->prim,
+                                               intersectionHandlingNoiseSource,
+                                               subrayDirection,
+                                               intersect->point,
+                                               outsideIntersectionPoint,
+                                               intensity);
         if (ihr.canRayContinue()) { // Subray can continue
           // Move subray origin outside primitive and update tMinMax
           subrayOrigin = outsideIntersectionPoint + 0.00001 * subrayDirection;
@@ -550,14 +561,19 @@ FullWaveformPulseRunnable::digestFullWaveform(
 
     string hitObject;
     int classification = 0;
-    if (closestIntersection != nullptr) {
-      hitObject = closestIntersection->prim->part->mId;
-      if (closestIntersection->prim->part->getType() ==
-          ScenePart::DYN_MOVING_OBJECT) { // Skip DSMO_ prefix for dynamic
-                                          // moving objects
-        hitObject = hitObject.substr(5);
+    if (closestIntersection != nullptr && closestIntersection->prim.isValid()) {
+      if (closestIntersection->prim.part != nullptr) {
+        hitObject = closestIntersection->prim.part->mId;
+        if (closestIntersection->prim.part->getType() ==
+            ScenePart::DYN_MOVING_OBJECT) { // Skip DSMO_ prefix for dynamic
+                                            // moving objects
+          hitObject = hitObject.substr(5);
+        }
       }
-      classification = closestIntersection->prim->material->classification;
+      std::shared_ptr<Material> mat =
+        PrimitiveAccessor::getMaterial(closestIntersection->prim);
+      if (mat != nullptr)
+        classification = mat->classification;
     }
 
     // Add distance error (mechanical range error)

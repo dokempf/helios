@@ -4,7 +4,6 @@
 
 #include <LightKDTreeNode.h>
 #include <Material.h>
-#include <Primitive.h>
 #include <RaySceneIntersection.h>
 #include <Raycaster.h>
 
@@ -50,7 +49,7 @@ class KDTreeRaycaster : public Raycaster
      *  (i.e. those which distance with respect to ray origin is greater than
      *  0)
      */
-    std::map<double, Primitive*> collectedPoints;
+    std::map<double, PrimitiveRef> collectedPoints;
 
     // ***  CONSTRUCTION / DESTRUCTION  *** //
     // ************************************ //
@@ -99,11 +98,11 @@ public:
    * @see Raycaster::searchAll
    * @see KDTreeRaycaster::searchAll_recursive
    */
-  std::map<double, Primitive*> searchAll(glm::dvec3 const rayOrigin,
-                                         glm::dvec3 const rayDir,
-                                         double const tmin,
-                                         double const tmax,
-                                         bool const groundOnly) override;
+  std::map<double, PrimitiveRef> searchAll(glm::dvec3 const rayOrigin,
+                                           glm::dvec3 const rayDir,
+                                           double const tmin,
+                                           double const tmax,
+                                           bool const groundOnly) override;
   /**
    * @see Raycaster::search
    * @see KDTreeRaycaster::search_recursive
@@ -148,8 +147,8 @@ protected:
    * @return Return first found intersection
    * @see KDTreeRaycaster::search
    */
-  Primitive* search_recursive(LightKDTreeNode* node,
-                              double const tmin,
-                              double const tmax,
-                              KDTreeRaycasterSearch& search) const;
+  PrimitiveRef search_recursive(LightKDTreeNode* node,
+                                double const tmin,
+                                double const tmax,
+                                KDTreeRaycasterSearch& search) const;
 };

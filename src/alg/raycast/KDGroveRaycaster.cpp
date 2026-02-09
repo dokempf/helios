@@ -2,17 +2,17 @@
 
 // ***  RAYCASTING METHODS  *** //
 // **************************** //
-std::map<double, Primitive*>
+std::map<double, PrimitiveRef>
 KDGroveRaycaster::searchAll(glm::dvec3 rayOrigin,
                             glm::dvec3 rayDir,
                             double tmin,
                             double tmax,
                             bool groundOnly)
 {
-  std::map<double, Primitive*> out;
+  std::map<double, PrimitiveRef> out;
   size_t const m = grove->getNumTrees();
   for (size_t i = 0; i < m; ++i) {
-    std::map<double, Primitive*> partial = grove->getTreeShared(i)->searchAll(
+    std::map<double, PrimitiveRef> partial = grove->getTreeShared(i)->searchAll(
       rayOrigin, rayDir, tmin, tmax, groundOnly);
     out.insert(partial.begin(), partial.end());
   }
@@ -25,7 +25,7 @@ KDGroveRaycaster::search(glm::dvec3 rayOrigin,
                          double tmax,
                          bool groundOnly)
 {
-  std::map<double, Primitive*> out;
+  std::map<double, PrimitiveRef> out;
   size_t const m = grove->getNumTrees();
   RaySceneIntersection *bestRSI = nullptr, *rsi;
   for (size_t i = 0; i < m; ++i) {

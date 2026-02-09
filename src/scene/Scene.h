@@ -10,11 +10,10 @@
 
 #include <AABB.h>
 #include <Asset.h>
-#include <DetailedVoxel.h>
-#include <Triangle.h>
 #include <Vertex.h>
 #include <Voxel.h>
-#include <scene/primitives/PrimitiveViews.h>
+#include <scene/dynamic/DynMovingObject.h>
+#include <scene/dynamic/DynSequentiableMovingObject.h>
 
 #include <KDGrove.h>
 #include <KDGroveFactory.h>
@@ -43,12 +42,9 @@ private:
   template<class Archive>
   void save(Archive& ar, unsigned int const version) const
   {
-    // Register primitive derivates
-    ar.template register_type<Vertex>();
-    ar.template register_type<AABB>();
-    ar.template register_type<Triangle>();
-    ar.template register_type<Voxel>();
-    ar.template register_type<DetailedVoxel>();
+    // Register dynamic ScenePart derivates
+    ar.template register_type<DynMovingObject>();
+    ar.template register_type<DynSequentiableMovingObject>();
 
     // Save the scene itself
     boost::serialization::void_cast_register<Scene, Asset>();
@@ -57,13 +53,6 @@ private:
     // ar &kdgrove; // KDGrove not saved because trees might be too deep
     ar & bbox;
     ar & bbox_crs;
-    std::vector<Primitive*> standalonePrimitives;
-    standalonePrimitives.reserve(primitives.size());
-    for (Primitive* p : primitives) {
-      if (p->part == nullptr && !isPrimitiveView(p))
-        standalonePrimitives.push_back(p);
-    }
-    ar & standalonePrimitives;
     ar & parts;
   }
   /**
@@ -76,12 +65,9 @@ private:
   template<class Archive>
   void load(Archive& ar, unsigned int const fileVersion)
   {
-    // Register primitive derivates
-    ar.template register_type<Vertex>();
-    ar.template register_type<AABB>();
-    ar.template register_type<Triangle>();
-    ar.template register_type<Voxel>();
-    ar.template register_type<DetailedVoxel>();
+    // Register dynamic ScenePart derivates
+    ar.template register_type<DynMovingObject>();
+    ar.template register_type<DynSequentiableMovingObject>();
 
     // Load the scene itself
     boost::serialization::void_cast_register<Scene, Asset>();
@@ -90,19 +76,10 @@ private:
     // ar &kdgrove; // KDTree not loaded because it might be too deep
     ar & bbox;
     ar & bbox_crs;
-    std::vector<Primitive*> standalonePrimitives;
-    ar & standalonePrimitives;
     ar & parts;
 
     primitives.clear();
-    for (std::shared_ptr<ScenePart>& part : parts) {
-      part->buildPrimitiveViewsFromBulk();
-      primitives.insert(
-        primitives.end(), part->mPrimitives.begin(), part->mPrimitives.end());
-    }
-    primitives.insert(primitives.end(),
-                      standalonePrimitives.begin(),
-                      standalonePrimitives.end());
+    registerParts();
 
     // Build KDTree from primitives
     if (kdgf != nullptr)
@@ -156,7 +133,7 @@ public:
   /**
    * @brief Vector of primitives composing the scene
    */
-  std::vector<Primitive*> primitives;
+  std::vector<PrimitiveRef> primitives;
   /**
    * @brief Parts composing the scene with no repeats.
    *
@@ -177,13 +154,7 @@ public:
         std::make_shared<SimpleKDTreeFactory>()))
   {
   }
-  ~Scene() override
-  {
-    for (Primitive* p : primitives) {
-      if (!isPrimitiveView(p))
-        delete p;
-    }
-  }
+  ~Scene() override = default;
   Scene(Scene& s);
 
   // ***   M E T H O D S   *** //
@@ -261,9 +232,9 @@ public:
    * @see KDTreeRaycaster
    * @see KDTreeRaycaster::searchAll
    */
-  std::map<double, Primitive*> getIntersections(glm::dvec3& rayOrigin,
-                                                glm::dvec3& rayDir,
-                                                bool const groundOnly);
+  std::map<double, PrimitiveRef> getIntersections(glm::dvec3& rayOrigin,
+                                                  glm::dvec3& rayDir,
+                                                  bool const groundOnly);
 
   /**
    * @brief Obtain the minimum boundaries of the original axis aligned

@@ -1,6 +1,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <MathConstants.h>
+#include <ScenePart.h>
 #include <maths/rigidmotion/RigidMotionEngine.h>
 #include <maths/rigidmotion/RigidMotionException.h>
 #include <maths/rigidmotion/RigidMotionR2Factory.h>
@@ -8,7 +9,6 @@
 #include <scene/dynamic/DynMotion.h>
 #include <scene/dynamic/DynMotionEngine.h>
 #include <scene/dynamic/DynMovingObject.h>
-#include <scene/primitives/Triangle.h>
 
 TEST_CASE("Rigid motion test")
 {
@@ -326,16 +326,18 @@ TEST_CASE("Rigid motion test")
     DynMotionEngine dme;
 
     // Build dynamic moving object for the tests
-    std::vector<Primitive*> primitives;
+    ScenePart dmoPart;
+    dmoPart.primitiveType = ScenePart::PrimitiveType::TRIANGLE;
     Vertex v0(-1.0, -1.0, 0.0);
     Vertex v1(1.0, -1.0, 0.0);
     Vertex v2(0.0, 1.0, 0.0);
     Vertex v3(0.0, 0.0, 1.0);
-    primitives.push_back(new Triangle(v0, v1, v2));
-    primitives.push_back(new Triangle(v0, v1, v3));
-    primitives.push_back(new Triangle(v0, v2, v3));
-    primitives.push_back(new Triangle(v1, v2, v3));
-    DynMovingObject dmo("HRMTestDMO", primitives);
+    appendTriangleBulk(dmoPart.triangles, v0, v1, v2, nullptr);
+    appendTriangleBulk(dmoPart.triangles, v0, v1, v3, nullptr);
+    appendTriangleBulk(dmoPart.triangles, v0, v2, v3, nullptr);
+    appendTriangleBulk(dmoPart.triangles, v1, v2, v3, nullptr);
+    DynMovingObject dmo(dmoPart);
+    dmo.setId("HRMTestDMO");
     dmo.computeCentroid();
 
     auto validate_dyn_motion = [&](const DynMotion& dm,

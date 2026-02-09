@@ -46,7 +46,6 @@ struct GroveTestFixture
                        Vertex(0, 0, 1),
                        Vertex(-1, -1, -1),
                        nullptr);
-    part1->buildPrimitiveViewsFromBulk();
     parts.push_back(part1);
 
     // Second tree
@@ -72,7 +71,6 @@ struct GroveTestFixture
                        Vertex(1, 1, 1),
                        Vertex(0, 0, -1),
                        nullptr);
-    part2->buildPrimitiveViewsFromBulk();
     parts.push_back(part2);
 
     // Third tree
@@ -98,7 +96,6 @@ struct GroveTestFixture
                        Vertex(5, 5, 1),
                        Vertex(4, 4, -1),
                        nullptr);
-    part3->buildPrimitiveViewsFromBulk();
     parts.push_back(part3);
 
     // Fourth tree
@@ -124,7 +121,6 @@ struct GroveTestFixture
                        Vertex(10, 10, -3),
                        Vertex(9, 9, 0),
                        nullptr);
-    part4->buildPrimitiveViewsFromBulk();
     parts.push_back(part4);
   }
 

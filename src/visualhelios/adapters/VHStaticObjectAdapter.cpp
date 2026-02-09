@@ -1,8 +1,6 @@
 #ifdef PCL_BINDING
 
-#include <Primitive.h>
 #include <VHStaticObjectAdapter.h>
-#include <Voxel.h>
 
 #include <functional>
 
@@ -13,57 +11,59 @@ using visualhelios::VHStaticObjectAdapter;
 void
 VHStaticObjectAdapter::buildPolymesh()
 {
-  // Select adequate function to add primitives to polymesh
-  std::function<void(Primitive*, int&)> addPrimitiveToPolymesh; // Add func
-  if (staticObj.getPrimitiveType() == ScenePart::PrimitiveType::TRIANGLE) {
-    addPrimitiveToPolymesh = [&](Primitive* primitive, int& offset) -> void {
-      addTriangleToPolymesh(primitive, offset);
-    };
-  } else if (staticObj.getPrimitiveType() == ScenePart::PrimitiveType::VOXEL) {
-    addPrimitiveToPolymesh = [&](Primitive* primitive, int& offset) -> void {
-      addVoxelToPolymesh(primitive, offset);
-    };
-  } else {
-    throw HeliosException("VHStaticObjectAdapter::buildPolymesh failed.\n"
-                          "Type of primitive cannot be recognized");
-  }
-
   // Instantiate a new polymesh replacing the old one, if any
   constructPolymesh();
   vertices.clear();
 
   // Add each primitive to the polymesh
   int offset = 0; // To handle vertex indices
-  vector<Primitive*> const& primitives = staticObj.mPrimitives;
-  for (Primitive* primitive : primitives) {    // For each primitive in object
-    addPrimitiveToPolymesh(primitive, offset); // Add it to the polymesh
+  if (staticObj.getPrimitiveType() == ScenePart::PrimitiveType::TRIANGLE) {
+    size_t const n = staticObj.triangles.size();
+    for (size_t i = 0; i < n; ++i) {
+      size_t const base = 3 * i;
+      if (base + 2 >= staticObj.triangles.vertices.size())
+        break;
+      addTriangleToPolymesh(&staticObj.triangles.vertices[base], offset);
+    }
+  } else if (staticObj.getPrimitiveType() == ScenePart::PrimitiveType::VOXEL) {
+    size_t const n = staticObj.voxels.size();
+    for (size_t i = 0; i < n; ++i) {
+      if (i >= staticObj.voxels.centers.size() ||
+          i >= staticObj.voxels.half_size.size())
+        break;
+      addVoxelToPolymesh(
+        staticObj.voxels.centers[i], staticObj.voxels.half_size[i], offset);
+    }
+  } else {
+    throw HeliosException("VHStaticObjectAdapter::buildPolymesh failed.\n"
+                          "Type of primitive cannot be recognized");
   }
 }
 
 // ***  UTILS  *** //
 // *************** //
 void
-VHStaticObjectAdapter::addTriangleToPolymesh(Primitive* primitive, int& offset)
+VHStaticObjectAdapter::addTriangleToPolymesh(Vertex const* vertices,
+                                             int& offset)
 {
   pcl::Vertices verts; // Vertex connection order for the primitive
-  Vertex* primitiveVerts = primitive->getVertices();
   for (int i = 0; i < 3; ++i) {
-    vertexToMesh(primitiveVerts[i]);
+    vertexToMesh(vertices[i]);
     verts.vertices.push_back(offset + i); // Register vertex order
   }
   vertices.push_back(verts); // Register primitive order of vertices
   offset += 3;               // Update vertex start index for next primitive
 }
 void
-VHStaticObjectAdapter::addVoxelToPolymesh(Primitive* primitive, int& offset)
+VHStaticObjectAdapter::addVoxelToPolymesh(Vertex const& center,
+                                          double halfSize,
+                                          int& offset)
 {
   // Get all vertices from voxel
-  Vertex& c = primitive->getVertices()[0];
-  double const halfSize = ((Voxel*)primitive)->halfSize;
   double const fullSize = 2.0 * halfSize;
   glm::dvec3 halfVec(halfSize, halfSize, halfSize);
   Vertex A;
-  A.pos = c.pos - halfVec;
+  A.pos = center.pos - halfVec;
   Vertex B;
   B.pos = A.pos + glm::dvec3(fullSize, 0, 0);
   Vertex C;
@@ -77,7 +77,7 @@ VHStaticObjectAdapter::addVoxelToPolymesh(Primitive* primitive, int& offset)
   Vertex G;
   G.pos = E.pos + glm::dvec3(0, 0, fullSize);
   Vertex H;
-  H.pos = c.pos + halfVec;
+  H.pos = center.pos + halfVec;
 
   // Put all vertices into the mesh
   vertexToMesh(A);

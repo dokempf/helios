@@ -6,7 +6,6 @@
 #include <SpectralLibrary.h>
 #include <WavefrontObjFileLoader.h>
 #include <XYZPointCloudFileLoader.h>
-#include <scene/primitives/PrimitiveViews.h>
 
 #include <fluxionum/DiffDesignMatrixInterpolator.h>
 #include <fluxionum/ParametricLinearPiecesFunction.h>
@@ -56,11 +55,9 @@ finalizeStaticScene(std::shared_ptr<StaticScene> scene,
   for (auto& sp : scene->parts) {
     // Append as a static object
     scene->appendStaticObject(sp);
-
-    // Add scene part primitives to the scene
-    scene->primitives.insert(
-      scene->primitives.end(), sp->mPrimitives.begin(), sp->mPrimitives.end());
   }
+
+  scene->registerParts();
 
   // Call scene finalization
   if (!scene->finalizeLoading()) {
@@ -103,16 +100,6 @@ readObjScenePart(std::string filePath,
   loader.setAssetsDir(assetsPath);
   std::shared_ptr<ScenePart> sp(loader.run());
 
-  // Connect all primitives to their scene part
-  std::shared_ptr<ScenePart> nonOwning =
-    std::shared_ptr<ScenePart>(sp.get(), [](ScenePart*) {});
-  for (auto p : sp->mPrimitives) {
-    if (isPrimitiveView(p))
-      p->part = nonOwning;
-    else
-      p->part = sp;
-  }
-
   // Object lifetime caveat! Settings primsOut to nullptr will prevent the
   // loader destructor from deleting the primitives.
   loader.primsOut = nullptr;
@@ -127,16 +114,6 @@ readTiffScenePart(std::string filePath)
   GeoTiffFileLoader loader;
   loader.params["filepath"] = filePath;
   std::shared_ptr<ScenePart> sp(loader.run());
-
-  // Connect all primitives to their scene part
-  std::shared_ptr<ScenePart> nonOwning =
-    std::shared_ptr<ScenePart>(sp.get(), [](ScenePart*) {});
-  for (auto p : sp->mPrimitives) {
-    if (isPrimitiveView(p))
-      p->part = nonOwning;
-    else
-      p->part = sp;
-  }
 
   // Object lifetime caveat! Settings primsOut to nullptr will prevent the
   // loader destructor from deleting the primitives.
@@ -200,14 +177,6 @@ readXYZScenePart(std::string filePath,
   loader.setAssetsDir(assetsPath);
 
   std::shared_ptr<ScenePart> sp(loader.run());
-  std::shared_ptr<ScenePart> nonOwning =
-    std::shared_ptr<ScenePart>(sp.get(), [](ScenePart*) {});
-  for (auto p : sp->mPrimitives) {
-    if (isPrimitiveView(p))
-      p->part = nonOwning;
-    else
-      p->part = sp;
-  }
 
   // Object lifetime caveat! Settings primsOut to nullptr will prevent the
   // loader destructor from deleting the primitives.
@@ -241,15 +210,6 @@ readVoxScenePart(std::string filePath,
   loader.setAssetsDir(assetsPath);
   std::shared_ptr<ScenePart> sp(loader.run());
 
-  std::shared_ptr<ScenePart> nonOwning =
-    std::shared_ptr<ScenePart>(sp.get(), [](ScenePart*) {});
-  for (auto p : sp->mPrimitives) {
-    if (isPrimitiveView(p))
-      p->part = nonOwning;
-    else
-      p->part = sp;
-  }
-
   loader.primsOut = nullptr;
 
   return sp;
@@ -258,22 +218,59 @@ readVoxScenePart(std::string filePath,
 void
 rotateScenePart(std::shared_ptr<ScenePart> sp, Rotation rotation)
 {
-  for (auto p : sp->mPrimitives)
-    p->rotate(rotation);
+  if (sp == nullptr)
+    return;
+  if (sp->primitiveType == ScenePart::PrimitiveType::TRIANGLE) {
+    for (Vertex& v : sp->triangles.vertices) {
+      v.pos = rotation.applyTo(v.pos);
+      v.normal = rotation.applyTo(v.normal);
+    }
+    sp->updateBulk();
+  } else if (sp->primitiveType == ScenePart::PrimitiveType::VOXEL) {
+    for (Vertex& v : sp->voxels.centers) {
+      v.pos = rotation.applyTo(v.pos);
+      v.normal = rotation.applyTo(v.normal);
+    }
+    sp->updateBulk();
+  }
 }
 
 void
 scaleScenePart(std::shared_ptr<ScenePart> sp, double scaleFactor)
 {
-  for (auto p : sp->mPrimitives)
-    p->scale(scaleFactor);
+  if (sp == nullptr)
+    return;
+  if (sp->primitiveType == ScenePart::PrimitiveType::TRIANGLE) {
+    for (Vertex& v : sp->triangles.vertices) {
+      v.pos = glm::dvec3(
+        v.pos.x * scaleFactor, v.pos.y * scaleFactor, v.pos.z * scaleFactor);
+    }
+    sp->updateBulk();
+  } else if (sp->primitiveType == ScenePart::PrimitiveType::VOXEL) {
+    for (Vertex& v : sp->voxels.centers) {
+      v.pos = glm::dvec3(
+        v.pos.x * scaleFactor, v.pos.y * scaleFactor, v.pos.z * scaleFactor);
+    }
+    sp->updateBulk();
+  }
 }
 
 void
 translateScenePart(std::shared_ptr<ScenePart> sp, glm::dvec3 offset)
 {
-  for (auto p : sp->mPrimitives)
-    p->translate(offset);
+  if (sp == nullptr)
+    return;
+  if (sp->primitiveType == ScenePart::PrimitiveType::TRIANGLE) {
+    for (Vertex& v : sp->triangles.vertices) {
+      v.pos = v.pos + offset;
+    }
+    sp->updateBulk();
+  } else if (sp->primitiveType == ScenePart::PrimitiveType::VOXEL) {
+    for (Vertex& v : sp->voxels.centers) {
+      v.pos = v.pos + offset;
+    }
+    sp->updateBulk();
+  }
 }
 
 void
@@ -472,29 +469,7 @@ addScenePartToScene(std::shared_ptr<StaticScene> scene,
 {
   invalidateStaticScene(scene);
   scene->setKDGrove(nullptr);
-  for (auto& sp : scene->parts) {
-    // Append as a static object
-    scene->appendStaticObject(sp);
-
-    // Add scene part primitives to the scene
-    scene->primitives.insert(
-      scene->primitives.end(), sp->mPrimitives.begin(), sp->mPrimitives.end());
-  }
-  // Add the new scene part
-  std::shared_ptr<ScenePart> nonOwning =
-    std::shared_ptr<ScenePart>(scenePart.get(), [](ScenePart*) {});
-  for (Primitive* primitive : scenePart->mPrimitives) {
-    if (primitive->part == nullptr) {
-      if (isPrimitiveView(primitive))
-        primitive->part = nonOwning;
-      else
-        primitive->part = scenePart;
-    }
-  }
-  scene->appendStaticObject(scenePart);
-  scene->primitives.insert(scene->primitives.end(),
-                           scenePart->mPrimitives.begin(),
-                           scenePart->mPrimitives.end());
+  scene->parts.push_back(scenePart);
   scene->registerParts();
   invalidateStaticScene(scene); // invalidate it for further finalization
 }

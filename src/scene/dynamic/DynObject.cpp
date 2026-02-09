@@ -1,5 +1,4 @@
 #include <scene/dynamic/DynObject.h>
-#include <scene/primitives/Primitive.h>
 
 // ***  DYNAMIC BEHAVIOR  *** //
 // ************************** //
@@ -21,12 +20,7 @@ DynObject::countVertices() const
   if (primitiveType == PrimitiveType::VOXEL)
     return voxels.centers.size();
 
-  size_t m = 0;
-  for (Primitive* primitive : mPrimitives) {
-    if (primitive != nullptr)
-      m += primitive->getNumVertices();
-  }
-  return m;
+  return 0;
 }
 
 arma::mat
@@ -53,15 +47,6 @@ DynObject::matrixFromPrimitives(
       X.col(i++) = get(&v);
     }
     return X;
-  }
-
-  for (Primitive* primitive : mPrimitives) {
-    if (primitive == nullptr)
-      continue;
-    Vertex const* vertices = primitive->getVertices();
-    for (size_t k = 0; k < primitive->getNumVertices(); ++k, ++i) {
-      X.col(i) = get(vertices + k);
-    }
   }
   return X;
 }
@@ -91,15 +76,6 @@ DynObject::matrixToPrimitives(
       set(&v, X.col(i++));
     }
     return;
-  }
-
-  for (Primitive* primitive : mPrimitives) {
-    if (primitive == nullptr)
-      continue;
-    Vertex* vertices = primitive->getVertices();
-    for (size_t k = 0; k < primitive->getNumVertices(); ++k, ++i) {
-      set(vertices + k, X.col(i));
-    }
   }
 }
 

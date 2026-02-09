@@ -1,7 +1,7 @@
 #include <assetloading/ScenePart.h>
 #include <filems/factory/FMSFacadeFactory.h>
 #include <scene/Scene.h>
-#include <scene/primitives/PrimitiveViews.h>
+#include <scene/primitives/PrimitiveAccessor.h>
 #include <sim/comps/SimulationPlayer.h>
 #include <sim/core/Simulation.h>
 #include <sim/core/SurveyPlayback.h>
@@ -12,6 +12,53 @@ using helios::filems::FMSFacadeFactory;
 
 #include <chrono>
 using namespace std::chrono;
+
+namespace {
+void
+applyShift(ScenePart& part, glm::dvec3 const& shift)
+{
+  if (part.primitiveType == ScenePart::PrimitiveType::TRIANGLE) {
+    for (Vertex& v : part.triangles.vertices) {
+      v.pos = v.pos + shift;
+    }
+    part.updateBulk();
+  } else if (part.primitiveType == ScenePart::PrimitiveType::VOXEL) {
+    for (Vertex& v : part.voxels.centers) {
+      v.pos = v.pos + shift;
+    }
+    part.updateBulk();
+  }
+}
+
+void
+updateBounds(ScenePart& part,
+             double& xmin,
+             double& xmax,
+             double& ymin,
+             double& ymax,
+             double& zmin,
+             double& zmax)
+{
+  std::vector<Vertex*> vertices = part.getAllVertices();
+  for (Vertex* v : vertices) {
+    if (v == nullptr)
+      continue;
+    glm::dvec3 const& pos = v->pos;
+    if (pos.x < xmin)
+      xmin = pos.x;
+    if (pos.x > xmax)
+      xmax = pos.x;
+    if (pos.y < ymin)
+      ymin = pos.y;
+    if (pos.y > ymax)
+      ymax = pos.y;
+    if (pos.z < zmin)
+      zmin = pos.z;
+    if (pos.z > zmax)
+      zmax = pos.z;
+  }
+}
+} // namespace
 
 // ***  CONSTRUCTION / DESTRUCTION  *** //
 // ************************************ //
@@ -178,7 +225,6 @@ SimulationPlayer::restartScene(Scene& scene, bool const keepCRS)
   // get primitives from current scene parts (thus, those that belong to
   // non-existent scene parts will be discarded)
   std::vector<std::shared_ptr<ScenePart>> newParts;
-  std::vector<Primitive*> newPrims;
   glm::dvec3 const oldCRSCenter = scene.getBBoxCRS()->getCentroid();
   glm::dvec3 const oldFinalCenter = scene.getBBox()->getCentroid();
   AABB const oldCRSBBox = *scene.getBBoxCRS();
@@ -186,20 +232,14 @@ SimulationPlayer::restartScene(Scene& scene, bool const keepCRS)
     // Handle scene parts that need to be discarded
     if (sp->sorh != nullptr && sp->sorh->needsDiscardOnReplay() &&
         !sp->isNull()) {
-      for (Primitive* p : sp->sorh->getBaselinePrimitives()) {
-        if (!isPrimitiveView(p))
-          delete p;
-      }
-      for (Primitive* p : sp->mPrimitives) {
-        if (!isPrimitiveView(p))
-          delete p;
-      }
       if (sp->sorh->hasNoFuture())
         sp->sorh = nullptr;
       else {
         sp->sorh->setNull(true);
-        sp->sorh->getBaselinePrimitives().clear();
-        sp->mPrimitives.clear();
+        ScenePart* baseline = sp->sorh->getBaseline();
+        if (baseline != nullptr)
+          baseline->clearBulkData();
+        sp->clearBulkData();
         newParts.push_back(sp);
       }
       continue;
@@ -208,35 +248,32 @@ SimulationPlayer::restartScene(Scene& scene, bool const keepCRS)
     if (sp->sorh == nullptr ||
         (sp->sorh != nullptr && !sp->sorh->isOnSwapFirstPlay())) {
       // Undo old CRS shift on primitives before scene update and reload
-      for (Primitive* p : sp->mPrimitives) {
-        Vertex* v = p->getVertices();
-        for (size_t i = 0; i < p->getNumVertices(); ++i) {
-          v[i].pos = v[i].pos + oldCRSCenter;
-        }
-      }
+      applyShift(*sp, oldCRSCenter);
     }
     // Handle scene parts who are in the first play after a swap
     if (sp->sorh != nullptr && sp->sorh->isOnSwapFirstPlay()) {
       ScenePart::computeTransformations(sp, sp->sorh->isHolistic());
       sp->sorh->setOnSwapFirstPlay(false);
-      if (!sp->mPrimitives.empty()) {
+      bool hasBulk = false;
+      if (sp->primitiveType == ScenePart::PrimitiveType::TRIANGLE)
+        hasBulk = !sp->triangles.vertices.empty();
+      else if (sp->primitiveType == ScenePart::PrimitiveType::VOXEL)
+        hasBulk = !sp->voxels.centers.empty();
+      if (hasBulk) {
         sp->sorh->setNull(false);
         sp->sorh->setDiscardOnReplay(false);
       }
     }
     // Prepare new data for scene
     newParts.push_back(sp);
-    newPrims.insert(
-      newPrims.cend(), sp->mPrimitives.begin(), sp->mPrimitives.end());
   }
   scene.parts = newParts;
-  scene.primitives = newPrims;
+  scene.registerParts();
   // Apply default reflectances when needed
-  for (Primitive* p : scene.primitives) {
-    Material& mat = *p->material;
-    if (std::isnan(mat.reflectance)) {
-      mat.reflectance = scene.getDefaultReflectance();
-    }
+  for (PrimitiveRef const& ref : scene.primitives) {
+    std::shared_ptr<Material> mat = PrimitiveAccessor::getMaterial(ref);
+    if (mat != nullptr && std::isnan(mat->reflectance))
+      mat->reflectance = scene.getDefaultReflectance();
   }
   // Reload scene (without KDGrove rebuilding)
   std::shared_ptr<KDGroveFactory> kdgf = scene.getKDGroveFactory();
@@ -250,29 +287,8 @@ SimulationPlayer::restartScene(Scene& scene, bool const keepCRS)
     double xmax = std::numeric_limits<double>::lowest();
     double ymin = xmin, ymax = xmax, zmin = xmin, zmax = xmax;
     for (std::shared_ptr<ScenePart> sp : scene.parts) {
-      for (Primitive* p : sp->mPrimitives) {
-        Vertex* v = p->getVertices();
-        for (size_t i = 0; i < p->getNumVertices(); ++i) {
-          v[i].pos = v[i].pos + currentDiff;
-        }
-        p->update();
-        // Also, find min and max coordinates
-        for (size_t i = 0; i < p->getNumVertices(); ++i) {
-          glm::dvec3 const pos = v[i].pos;
-          if (pos.x < xmin)
-            xmin = pos.x;
-          if (pos.x > xmax)
-            xmax = pos.x;
-          if (pos.y < ymin)
-            ymin = pos.y;
-          if (pos.y > ymax)
-            ymax = pos.y;
-          if (pos.z < zmin)
-            zmin = pos.z;
-          if (pos.z > zmax)
-            zmax = pos.z;
-        }
-      }
+      applyShift(*sp, currentDiff);
+      updateBounds(*sp, xmin, xmax, ymin, ymax, zmin, zmax);
     }
     // Compute the size of the new bounding box
     glm::dvec3 const oldCRSMin = oldCRSBBox.getMin();
@@ -307,13 +323,7 @@ SimulationPlayer::restartScene(Scene& scene, bool const keepCRS)
       std::make_shared<AABB>(newBBoxMin, newBBoxMax);
     // Apply new CRS shift on primitives
     for (std::shared_ptr<ScenePart> sp : scene.parts) {
-      for (Primitive* p : sp->mPrimitives) {
-        Vertex* v = p->getVertices();
-        for (size_t i = 0; i < p->getNumVertices(); ++i) {
-          v[i].pos = v[i].pos - oldCRSCenter;
-        }
-        p->update();
-      }
+      applyShift(*sp, -oldCRSCenter);
     }
     // Assign bounding boxes to scene
     scene.setBBoxCRS(newCRS);

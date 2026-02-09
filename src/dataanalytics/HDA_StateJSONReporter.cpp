@@ -475,11 +475,17 @@ HDA_StateJSONReporter::craftEntry(std::string const& key,
     (bound == nullptr) ? glm::dvec3(0, 0, 0) : sp.bound->getMin();
   glm::dvec3 boundMax =
     (bound == nullptr) ? glm::dvec3(0, 0, 0) : sp.bound->getMax();
+  size_t numPrimitives = 0;
+  if (sp.primitiveType == ScenePart::PrimitiveType::TRIANGLE)
+    numPrimitives = sp.triangles.size();
+  else if (sp.primitiveType == ScenePart::PrimitiveType::VOXEL)
+    numPrimitives = sp.voxels.size();
+
   ss << openEntry(depth, EntryType::OBJECT)
      << craftEntry("ScenePartKey", key, d2, true)
      << craftEntry("ID", sp.mId, d2, true)
      << craftEntry("primitiveType", sp.primitiveType, d2)
-     << craftEntry("numPrimitives", sp.mPrimitives.size(), d2)
+     << craftEntry("numPrimitives", numPrimitives, d2)
      << craftEntry("numVertices", sp.getAllVertices().size(), d2)
      << craftEntry("centroid", sp.centroid, d2)
      << craftEntry("bound_min", boundMin, d2)

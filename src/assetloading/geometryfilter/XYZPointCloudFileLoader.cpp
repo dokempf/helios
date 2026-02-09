@@ -69,8 +69,6 @@ XYZPointCloudFileLoader::run()
     primsOut->subpartLimit.push_back(primsOut->voxels.size());
   }
 
-  primsOut->buildPrimitiveViewsFromBulk();
-
   // Return
   return primsOut;
 }

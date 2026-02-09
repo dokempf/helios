@@ -6,6 +6,7 @@
 #include <SerialIO.h>
 #include <TimeWatcher.h>
 #include <UniformNoiseSource.h>
+#include <scene/primitives/PrimitiveAccessor.h>
 #include <surfaceinspector/maths/Plane.hpp>
 #include <surfaceinspector/maths/PlaneFitter.hpp>
 
@@ -24,6 +25,50 @@ using helios::analytics::HDA_GV;
 using SurfaceInspector::maths::Plane;
 using SurfaceInspector::maths::PlaneFitter;
 
+namespace {
+bool
+computeBoundsFromParts(std::vector<std::shared_ptr<ScenePart>> const& parts,
+                       glm::dvec3& minOut,
+                       glm::dvec3& maxOut)
+{
+  bool hasVertex = false;
+  double xmin = std::numeric_limits<double>::max();
+  double xmax = std::numeric_limits<double>::lowest();
+  double ymin = xmin, ymax = xmax, zmin = xmin, zmax = xmax;
+
+  for (std::shared_ptr<ScenePart> const& part : parts) {
+    if (part == nullptr)
+      continue;
+    std::vector<Vertex*> vertices = part->getAllVertices();
+    for (Vertex* v : vertices) {
+      if (v == nullptr)
+        continue;
+      hasVertex = true;
+      glm::dvec3 const& pos = v->pos;
+      if (pos.x < xmin)
+        xmin = pos.x;
+      if (pos.x > xmax)
+        xmax = pos.x;
+      if (pos.y < ymin)
+        ymin = pos.y;
+      if (pos.y > ymax)
+        ymax = pos.y;
+      if (pos.z < zmin)
+        zmin = pos.z;
+      if (pos.z > zmax)
+        zmax = pos.z;
+    }
+  }
+
+  if (!hasVertex)
+    return false;
+
+  minOut = glm::dvec3(xmin, ymin, zmin);
+  maxOut = glm::dvec3(xmax, ymax, zmax);
+  return true;
+}
+} // namespace
+
 // ***  CONSTRUCTION / DESTRUCTION  *** //
 // ************************************ //
 Scene::Scene(Scene& s)
@@ -36,35 +81,12 @@ Scene::Scene(Scene& s)
     this->bbox_crs = nullptr;
   else
     this->bbox_crs = std::shared_ptr<AABB>((AABB*)s.bbox_crs->clone());
-  std::set<ScenePart*> _parts; // Pointer to each ScenePart, no repeats
-  std::vector<Primitive*> nonPartPrimitives; // Primitives without ScenePart
-  ScenePart* _sp;
-  Primitive* _p;
-  for (size_t i = 0; i < s.primitives.size(); i++) { // Fill parts
-    _p = s.primitives[i];
-    _sp = _p->part.get();
-    if (_sp != nullptr)
-      _parts.insert(_sp); // Primitive with part
-    else
-      nonPartPrimitives.push_back(_p); // Primitive with no part
+  parts.clear();
+  for (std::shared_ptr<ScenePart> const& sp : s.parts) {
+    if (sp == nullptr)
+      continue;
+    parts.push_back(std::make_shared<ScenePart>(*sp));
   }
-  for (ScenePart* sp : _parts) { // Handle primitives associated with ScenePart
-    std::shared_ptr<ScenePart> spc = std::make_shared<ScenePart>(*sp);
-    this->parts.push_back(spc);
-    std::shared_ptr<ScenePart> nonOwning =
-      std::shared_ptr<ScenePart>(spc.get(), [](ScenePart*) {});
-    for (Primitive* p : spc->mPrimitives) {
-      if (isPrimitiveView(p))
-        p->part = nonOwning;
-      else
-        p->part = spc;
-      this->primitives.push_back(p);
-    }
-  }
-  for (Primitive* p : nonPartPrimitives) { // Handle primitives with no part
-    this->primitives.push_back(p->clone());
-  }
-
   registerParts();
   this->kdgf = s.kdgf;
   if (s.parts.empty()) {
@@ -79,33 +101,36 @@ Scene::Scene(Scene& s)
 bool
 Scene::finalizeLoading(bool const safe)
 {
+  registerParts();
   if (primitives.empty())
     return false;
 
   // #####   UPDATE PRIMITIVES ON FINISH LOADING   #####
   UniformNoiseSource<double> uns(*DEFAULT_RG, -1, 1);
-  for (Primitive* p : primitives) {
-    p->onFinishLoading(uns);
+  for (PrimitiveRef const& ref : primitives) {
+    PrimitiveAccessor::onFinishLoading(ref, uns);
   }
 
   // Report number of primitives in the scene
   std::ostringstream s;
   s << "Total # of primitives in scene: " << primitives.size() << "\n";
   logging::DEBUG(s.str());
-  if (primitives.size() == 0)
+  if (primitives.empty())
     return false;
 
   // Compute the number of vertices in the scene
   std::size_t numVertices = 0;
-  for (Primitive* p : primitives)
-    numVertices += p->getNumVertices();
+  for (PrimitiveRef const& ref : primitives)
+    numVertices += PrimitiveAccessor::getNumVertices(ref);
 
   // Register all parts and translate to ground those flagged as forceOnGround
-  registerParts();
   doForceOnGround();
 
   // Store original bounding box (CRS coordinates):
-  this->bbox_crs = AABB::getForPrimitives(primitives);
+  glm::dvec3 crsMin, crsMax;
+  if (!computeBoundsFromParts(parts, crsMin, crsMax))
+    return false;
+  this->bbox_crs = std::make_shared<AABB>(crsMin, crsMax);
   glm::dvec3 const diff = this->bbox_crs->getCentroid();
   std::stringstream ss;
   ss << "CRS bounding box (by vertices): " << this->bbox_crs->toString()
@@ -114,17 +139,28 @@ Scene::finalizeLoading(bool const safe)
   logging::INFO(ss.str());
   ss.str("");
 
-  // Iterate over the primitives and translate each vertex:
-  for (Primitive* p : primitives) {
-    Vertex* v = p->getVertices();
-    for (std::size_t i = 0; i < p->getNumVertices(); i++) {
-      v[i].pos = v[i].pos - diff;
+  // Translate all vertices by diff
+  for (std::shared_ptr<ScenePart> const& part : parts) {
+    if (part == nullptr)
+      continue;
+    if (part->primitiveType == ScenePart::PrimitiveType::TRIANGLE) {
+      for (Vertex& v : part->triangles.vertices) {
+        v.pos = v.pos - diff;
+      }
+      part->updateBulk();
+    } else if (part->primitiveType == ScenePart::PrimitiveType::VOXEL) {
+      for (Vertex& v : part->voxels.centers) {
+        v.pos = v.pos - diff;
+      }
+      part->updateBulk();
     }
-    p->update();
   }
 
   // Get new bounding box of translated scene:
-  this->bbox = AABB::getForPrimitives(primitives);
+  glm::dvec3 minOut, maxOut;
+  if (!computeBoundsFromParts(parts, minOut, maxOut))
+    return false;
+  this->bbox = std::make_shared<AABB>(minOut, maxOut);
 
   ss << "Actual bounding box (by vertices): " << this->bbox->toString();
   logging::INFO(ss.str());
@@ -146,17 +182,25 @@ Scene::finalizeLoading(bool const safe)
 void
 Scene::registerParts()
 {
-  // Find scene parts from primitives
-  std::unordered_set<std::shared_ptr<ScenePart>> partsSet;
-  for (Primitive* primitive : primitives)
-    if (primitive->part != nullptr)
-      partsSet.insert(primitive->part);
-  // Remove already registered scene parts
-  std::unordered_set<std::shared_ptr<ScenePart>>::iterator it;
-  for (std::shared_ptr<ScenePart> part : parts)
-    partsSet.erase(part);
-  // Register all new scene parts
-  parts.insert(parts.end(), partsSet.begin(), partsSet.end());
+  // De-duplicate parts
+  std::unordered_set<ScenePart*> seen;
+  std::vector<std::shared_ptr<ScenePart>> unique;
+  unique.reserve(parts.size());
+  for (std::shared_ptr<ScenePart> const& part : parts) {
+    if (part == nullptr)
+      continue;
+    if (seen.insert(part.get()).second)
+      unique.push_back(part);
+  }
+  parts.swap(unique);
+
+  // Rebuild primitive refs
+  primitives.clear();
+  for (std::shared_ptr<ScenePart> const& part : parts) {
+    if (part == nullptr)
+      continue;
+    part->appendPrimitiveRefs(primitives);
+  }
 }
 
 std::shared_ptr<AABB>
@@ -186,7 +230,7 @@ Scene::getGroundPointAt(glm::dvec3 point)
     return {};
   }
 
-  intersect->point.z += intersect->prim->getGroundZOffset();
+  intersect->point.z += PrimitiveAccessor::getGroundZOffset(intersect->prim);
   return intersect->point;
 }
 
@@ -216,7 +260,7 @@ Scene::getIntersection(std::vector<double> const& tMinMax,
     raycaster->search(rayOrigin, rayDir, tMinMax[0], tMinMax[1], groundOnly));
 }
 
-std::map<double, Primitive*>
+std::map<double, PrimitiveRef>
 Scene::getIntersections(glm::dvec3& rayOrigin,
                         glm::dvec3& rayDir,
                         bool const groundOnly)
@@ -242,11 +286,12 @@ std::vector<Vertex*>
 Scene::getAllVertices()
 {
   std::unordered_set<Vertex*> vset;
-  for (Primitive* primitive : primitives) {
-    std::size_t const m = primitive->getNumVertices();
-    Vertex* vertices = primitive->getVertices();
-    for (std::size_t i = 0; i < m; ++i)
-      vset.insert(vertices + i);
+  for (std::shared_ptr<ScenePart> const& part : parts) {
+    if (part == nullptr)
+      continue;
+    std::vector<Vertex*> vertices = part->getAllVertices();
+    for (Vertex* v : vertices)
+      vset.insert(v);
   }
   return { vset.begin(), vset.end() };
 }
@@ -263,11 +308,21 @@ Scene::doForceOnGround()
     std::shared_ptr<ScenePart> part = parts[i];
     if (part->isNull())
       continue;
-    if (part->mPrimitives.empty() || part->mPrimitives[0] == nullptr ||
-        part->mPrimitives[0]->material == nullptr)
+    if (part->primitiveType == ScenePart::PrimitiveType::TRIANGLE) {
+      if (part->triangles.materials.empty() ||
+          part->triangles.materials[0] == nullptr)
+        continue;
+      if (!part->triangles.materials[0]->isGround)
+        continue;
+    } else if (part->primitiveType == ScenePart::PrimitiveType::VOXEL) {
+      if (part->voxels.materials.empty() ||
+          part->voxels.materials[0] == nullptr)
+        continue;
+      if (!part->voxels.materials[0]->isGround)
+        continue;
+    } else {
       continue;
-    if (!part->mPrimitives[0]->material->isGround)
-      continue;
+    }
     I.push_back(i);              // Store index of found ground part
     planes.push_back(nullptr);   // Null placeholder for best fitting plane
     part->computeCentroid(true); // True implies also store boundaries

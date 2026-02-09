@@ -2,11 +2,11 @@
 
 #include <DynMotion.h>
 #include <MathConstants.h>
+#include <assetloading/ScenePartGeometry.h>
 #include <demo/SimplePrimitivesDemo.h>
 #include <rigidmotion/RigidMotionR3Factory.h>
 #include <scene/dynamic/DynMovingObject.h>
 #include <scene/dynamic/DynObject.h>
-#include <scene/primitives/PrimitiveViews.h>
 #include <visualhelios/VHSimpleCanvas.h>
 
 using namespace std::chrono_literals;
@@ -17,6 +17,41 @@ using std::shared_ptr;
 using std::vector;
 using visualhelios::VHDynObjectXYZRGBAdapter;
 using visualhelios::VHSimpleCanvas;
+
+namespace {
+void
+setTriangleNormals(Vertex& v0, Vertex& v1, Vertex& v2)
+{
+  glm::dvec3 e1 = v1.pos - v0.pos;
+  glm::dvec3 e2 = v2.pos - v0.pos;
+  glm::dvec3 normal = glm::cross(e1, e2);
+  double const len = glm::length(normal);
+  if (len > 0.0)
+    normal = normal / len;
+  v0.normal = normal;
+  v1.normal = normal;
+  v2.normal = normal;
+}
+
+void
+appendTriangle(ScenePart& part,
+               Vertex v0,
+               Vertex v1,
+               Vertex v2,
+               std::shared_ptr<Material> const& mat)
+{
+  setTriangleNormals(v0, v1, v2);
+  appendTriangleBulk(part.triangles, v0, v1, v2, mat);
+}
+
+Vertex
+makeColoredVertex(double x, double y, double z, Color4f const& color)
+{
+  Vertex v(x, y, z);
+  v.color = color;
+  return v;
+}
+} // namespace
 
 // ***  R U N  *** //
 // *************** //
@@ -101,7 +136,8 @@ SimplePrimitivesDemo::run()
       dmoFixed.pushNormalMotion(make_shared<DynMotion>(rm));
       dmoFixed.pushPositionMotion(
         make_shared<DynMotion>(rm3f.makeTranslation(arma::colvec("10;10;4"))));
-      if (dmoHelical.getPrimitives()[0]->getVertices()[0].getZ() >= 20.0)
+      std::vector<Vertex*> helixVerts = dmoHelical.getAllVertices();
+      if (!helixVerts.empty() && helixVerts[0]->getZ() >= 20.0)
         dmoHelical.pushPositionMotion(make_shared<DynMotion>(
           rm3f.makeTranslation(arma::colvec("0;0;-20"))));
       dmoHelical.pushPositionMotion(
@@ -113,33 +149,6 @@ SimplePrimitivesDemo::run()
   // Render canvas
   canvas.show();
 
-  // Destroy primitives
-  vector<Primitive*> primitives = mobileStructure->getPrimitives();
-  for (Primitive* primitive : primitives) {
-    if (!isPrimitiveView(primitive))
-      delete primitive;
-  }
-  primitives = fixedStructure->getPrimitives();
-  for (Primitive* primitive : primitives) {
-    if (!isPrimitiveView(primitive))
-      delete primitive;
-  }
-  primitives = helicalStructure->getPrimitives();
-  for (Primitive* primitive : primitives) {
-    if (!isPrimitiveView(primitive))
-      delete primitive;
-  }
-  primitives = staticStructure->getPrimitives();
-  for (Primitive* primitive : primitives) {
-    if (!isPrimitiveView(primitive))
-      delete primitive;
-  }
-  primitives = groundStructure->getPrimitives();
-  for (Primitive* primitive : primitives) {
-    if (!isPrimitiveView(primitive))
-      delete primitive;
-  }
-
   std::cout << "FINISHED SIMPLE PRIMITIVES DEMO!" << std::endl;
 }
 
@@ -148,213 +157,278 @@ SimplePrimitivesDemo::run()
 shared_ptr<DynObject>
 SimplePrimitivesDemo::buildMobileStructure()
 {
-  vector<Primitive*> triangles(0);
-  // Bottom surface
-  triangles.push_back(new Triangle(Vertex(-4.0, 2.0, -1.0),
-                                   Vertex(4.0, -2.0, -1.0),
-                                   Vertex(-4.0, -2.0, -1.0)));
-  triangles.push_back(new Triangle(
-    Vertex(-4.0, 2.0, -1.0), Vertex(4.0, 2.0, -1.0), Vertex(4.0, -2.0, -1.0)));
-  // Top surface
-  triangles.push_back(new Triangle(
-    Vertex(-4.0, 2.0, 1.0), Vertex(-4.0, -2.0, 1.0), Vertex(4.0, -2.0, 1.0)));
-  triangles.push_back(new Triangle(
-    Vertex(-4.0, 2.0, 1.0), Vertex(4.0, -2.0, 1.0), Vertex(4.0, 2.0, 1.0)));
-  // Left surface
-  triangles.push_back(new Triangle(
-    Vertex(-4.0, -2.0, -1.0), Vertex(-4.0, -2.0, 1.0), Vertex(-4.0, 2.0, 1.0)));
-  triangles.push_back(new Triangle(
-    Vertex(-4.0, -2.0, -1.0), Vertex(-4.0, 2.0, 1.0), Vertex(-4.0, 2.0, -1.0)));
-  // Right surface
-  triangles.push_back(new Triangle(
-    Vertex(4.0, -2.0, -1.0), Vertex(4.0, 2.0, 1.0), Vertex(4.0, -2.0, 1.0)));
-  triangles.push_back(new Triangle(
-    Vertex(4.0, -2.0, -1.0), Vertex(4.0, 2.0, -1.0), Vertex(4.0, 2.0, 1.0)));
-  // Front face
-  triangles.push_back(new Triangle(
-    Vertex(-4.0, -2.0, -1.0), Vertex(4.0, -2.0, 1.0), Vertex(-4.0, -2.0, 1.0)));
-  triangles.push_back(new Triangle(
-    Vertex(-4.0, -2.0, -1.0), Vertex(4.0, -2.0, -1.0), Vertex(4.0, -2.0, 1.0)));
-  // Back face
-  triangles.push_back(new Triangle(
-    Vertex(-4.0, 2.0, -1.0), Vertex(-4.0, 2.0, 1.0), Vertex(4.0, 2.0, 1.0)));
-  triangles.push_back(new Triangle(
-    Vertex(-4.0, 2.0, -1.0), Vertex(4.0, 2.0, 1.0), Vertex(4.0, 2.0, -1.0)));
-
-  // Color and normals
-  for (Primitive* primitive : triangles) {
-    ((Triangle*)primitive)->update(); // Compute normal
-    ((Triangle*)primitive)->setAllVertexNormalsFromFace();
-    Vertex* vertices = primitive->getVertices();
-    for (size_t i = 0; i < primitive->getNumVertices(); ++i) {
-      Color4f& color = vertices[i].color;
-      color.x = 0.5;
-      color.y = 0.0;
-      color.z = 0.0;
-    }
-  }
-
-  // Dynamic object
   shared_ptr<DynObject> dynObj =
-    make_shared<DynMovingObject>("mobileStructure", triangles);
+    make_shared<DynMovingObject>("mobileStructure");
   dynObj->primitiveType = ScenePart::PrimitiveType::TRIANGLE;
+  std::shared_ptr<Material> mat = std::make_shared<Material>();
+  Color4f color(0.5f, 0.0f, 0.0f, 1.0f);
+
+  // Bottom surface
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-4.0, 2.0, -1.0, color),
+                 makeColoredVertex(4.0, -2.0, -1.0, color),
+                 makeColoredVertex(-4.0, -2.0, -1.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-4.0, 2.0, -1.0, color),
+                 makeColoredVertex(4.0, 2.0, -1.0, color),
+                 makeColoredVertex(4.0, -2.0, -1.0, color),
+                 mat);
+  // Top surface
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-4.0, 2.0, 1.0, color),
+                 makeColoredVertex(-4.0, -2.0, 1.0, color),
+                 makeColoredVertex(4.0, -2.0, 1.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-4.0, 2.0, 1.0, color),
+                 makeColoredVertex(4.0, -2.0, 1.0, color),
+                 makeColoredVertex(4.0, 2.0, 1.0, color),
+                 mat);
+  // Left surface
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-4.0, -2.0, -1.0, color),
+                 makeColoredVertex(-4.0, -2.0, 1.0, color),
+                 makeColoredVertex(-4.0, 2.0, 1.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-4.0, -2.0, -1.0, color),
+                 makeColoredVertex(-4.0, 2.0, 1.0, color),
+                 makeColoredVertex(-4.0, 2.0, -1.0, color),
+                 mat);
+  // Right surface
+  appendTriangle(*dynObj,
+                 makeColoredVertex(4.0, -2.0, -1.0, color),
+                 makeColoredVertex(4.0, 2.0, 1.0, color),
+                 makeColoredVertex(4.0, -2.0, 1.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(4.0, -2.0, -1.0, color),
+                 makeColoredVertex(4.0, 2.0, -1.0, color),
+                 makeColoredVertex(4.0, 2.0, 1.0, color),
+                 mat);
+  // Front face
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-4.0, -2.0, -1.0, color),
+                 makeColoredVertex(4.0, -2.0, 1.0, color),
+                 makeColoredVertex(-4.0, -2.0, 1.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-4.0, -2.0, -1.0, color),
+                 makeColoredVertex(4.0, -2.0, -1.0, color),
+                 makeColoredVertex(4.0, -2.0, 1.0, color),
+                 mat);
+  // Back face
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-4.0, 2.0, -1.0, color),
+                 makeColoredVertex(-4.0, 2.0, 1.0, color),
+                 makeColoredVertex(4.0, 2.0, 1.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-4.0, 2.0, -1.0, color),
+                 makeColoredVertex(4.0, 2.0, 1.0, color),
+                 makeColoredVertex(4.0, 2.0, -1.0, color),
+                 mat);
+
   dynObj->computeCentroid();
   return dynObj;
 }
 shared_ptr<DynObject>
 SimplePrimitivesDemo::buildFixedStructure()
 {
-  vector<Primitive*> triangles(0);
-  // Bottom surface
-  triangles.push_back(new Triangle(Vertex(-2.0, 2.0, -4.0),
-                                   Vertex(2.0, -2.0, -4.0),
-                                   Vertex(-2.0, -2.0, -4.0)));
-  triangles.push_back(new Triangle(
-    Vertex(-2.0, 2.0, -4.0), Vertex(2.0, 2.0, -4.0), Vertex(2.0, -2.0, -4.0)));
-  // Top surface
-  triangles.push_back(new Triangle(
-    Vertex(-2.0, 2.0, 4.0), Vertex(-2.0, -2.0, 4.0), Vertex(2.0, -2.0, 4.0)));
-  triangles.push_back(new Triangle(
-    Vertex(-2.0, 2.0, 4.0), Vertex(2.0, -2.0, 4.0), Vertex(2.0, 2.0, 4.0)));
-  // Left surface
-  triangles.push_back(new Triangle(
-    Vertex(-2.0, -2.0, -4.0), Vertex(-2.0, -2.0, 4.0), Vertex(-2.0, 2.0, 4.0)));
-  triangles.push_back(new Triangle(
-    Vertex(-2.0, -2.0, -4.0), Vertex(-2.0, 2.0, 4.0), Vertex(-2.0, 2.0, -4.0)));
-  // Right surface
-  triangles.push_back(new Triangle(
-    Vertex(2.0, -2.0, -4.0), Vertex(2.0, 2.0, 4.0), Vertex(2.0, -2.0, 4.0)));
-  triangles.push_back(new Triangle(
-    Vertex(2.0, -2.0, -4.0), Vertex(2.0, 2.0, -4.0), Vertex(2.0, 2.0, 4.0)));
-  // Front face
-  triangles.push_back(new Triangle(
-    Vertex(-2.0, -2.0, -4.0), Vertex(2.0, -2.0, 4.0), Vertex(-2.0, -2.0, 4.0)));
-  triangles.push_back(new Triangle(
-    Vertex(-2.0, -2.0, -4.0), Vertex(2.0, -2.0, -4.0), Vertex(2.0, -2.0, 4.0)));
-  // Front face
-  triangles.push_back(new Triangle(
-    Vertex(-2.0, 2.0, -4.0), Vertex(-2.0, 2.0, 4.0), Vertex(2.0, 2.0, 4.0)));
-  triangles.push_back(new Triangle(
-    Vertex(-2.0, 2.0, -4.0), Vertex(2.0, 2.0, 4.0), Vertex(2.0, 2.0, -4.0)));
-
-  // Color and normals
-  for (Primitive* primitive : triangles) {
-    Vertex* vertices = primitive->getVertices();
-    ((Triangle*)primitive)->update(); // Compute normal
-    ((Triangle*)primitive)->setAllVertexNormalsFromFace();
-    for (size_t i = 0; i < primitive->getNumVertices(); ++i) {
-      Color4f& color = vertices[i].color;
-      color.x = 0.0;
-      color.y = 0.5;
-      color.z = 0.0;
-    }
-  }
-
-  // Dynamic object
-  shared_ptr<DynObject> dynObj =
-    make_shared<DynMovingObject>("fixedStructure", triangles);
+  shared_ptr<DynObject> dynObj = make_shared<DynMovingObject>("fixedStructure");
   dynObj->primitiveType = ScenePart::PrimitiveType::TRIANGLE;
+  std::shared_ptr<Material> mat = std::make_shared<Material>();
+  Color4f color(0.0f, 0.5f, 0.0f, 1.0f);
+
+  // Bottom surface
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-2.0, 2.0, -4.0, color),
+                 makeColoredVertex(2.0, -2.0, -4.0, color),
+                 makeColoredVertex(-2.0, -2.0, -4.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-2.0, 2.0, -4.0, color),
+                 makeColoredVertex(2.0, 2.0, -4.0, color),
+                 makeColoredVertex(2.0, -2.0, -4.0, color),
+                 mat);
+  // Top surface
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-2.0, 2.0, 4.0, color),
+                 makeColoredVertex(-2.0, -2.0, 4.0, color),
+                 makeColoredVertex(2.0, -2.0, 4.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-2.0, 2.0, 4.0, color),
+                 makeColoredVertex(2.0, -2.0, 4.0, color),
+                 makeColoredVertex(2.0, 2.0, 4.0, color),
+                 mat);
+  // Left surface
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-2.0, -2.0, -4.0, color),
+                 makeColoredVertex(-2.0, -2.0, 4.0, color),
+                 makeColoredVertex(-2.0, 2.0, 4.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-2.0, -2.0, -4.0, color),
+                 makeColoredVertex(-2.0, 2.0, 4.0, color),
+                 makeColoredVertex(-2.0, 2.0, -4.0, color),
+                 mat);
+  // Right surface
+  appendTriangle(*dynObj,
+                 makeColoredVertex(2.0, -2.0, -4.0, color),
+                 makeColoredVertex(2.0, 2.0, 4.0, color),
+                 makeColoredVertex(2.0, -2.0, 4.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(2.0, -2.0, -4.0, color),
+                 makeColoredVertex(2.0, 2.0, -4.0, color),
+                 makeColoredVertex(2.0, 2.0, 4.0, color),
+                 mat);
+  // Back face
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-2.0, -2.0, -4.0, color),
+                 makeColoredVertex(2.0, -2.0, 4.0, color),
+                 makeColoredVertex(-2.0, -2.0, 4.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-2.0, -2.0, -4.0, color),
+                 makeColoredVertex(2.0, -2.0, -4.0, color),
+                 makeColoredVertex(2.0, -2.0, 4.0, color),
+                 mat);
+  // Front face
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-2.0, 2.0, -4.0, color),
+                 makeColoredVertex(-2.0, 2.0, 4.0, color),
+                 makeColoredVertex(2.0, 2.0, 4.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-2.0, 2.0, -4.0, color),
+                 makeColoredVertex(2.0, 2.0, 4.0, color),
+                 makeColoredVertex(2.0, 2.0, -4.0, color),
+                 mat);
   dynObj->computeCentroid();
   return dynObj;
 }
 shared_ptr<DynObject>
 SimplePrimitivesDemo::buildHelicalStructure()
 {
-  vector<Primitive*> triangles(0);
-  // Upper surface
-  triangles.push_back(
-    new Triangle(Vertex(-1, -1, 0), Vertex(1, -1, 0), Vertex(0, 0, 2)));
-  triangles.push_back(
-    new Triangle(Vertex(0, 0, 2), Vertex(1, -1, 0), Vertex(0, 1, 0)));
-  triangles.push_back(
-    new Triangle(Vertex(-1, -1, 0), Vertex(0, 0, 2), Vertex(0, 1, 0)));
-  // Lower surface
-  triangles.push_back(
-    new Triangle(Vertex(-1, -1, 0), Vertex(0, 0, -2), Vertex(1, -1, 0)));
-  triangles.push_back(
-    new Triangle(Vertex(0, 0, -2), Vertex(0, 1, 0), Vertex(1, -1, 0)));
-  triangles.push_back(
-    new Triangle(Vertex(-1, -1, 0), Vertex(0, 1, 0), Vertex(0, 0, -2)));
-
-  // Color and normals
-  for (Primitive* primitive : triangles) {
-    ((Triangle*)primitive)->update(); // Compute normal
-    ((Triangle*)primitive)->setAllVertexNormalsFromFace();
-    Vertex* vertices = primitive->getVertices();
-    for (size_t i = 0; i < primitive->getNumVertices(); ++i) {
-      Color4f& color = vertices[i].color;
-      color.x = 0.6;
-      color.y = 0.6;
-      color.z = 0.0;
-    }
-  }
-
-  // Dynamic object
   shared_ptr<DynObject> dynObj =
-    make_shared<DynMovingObject>("helicalStructure", triangles);
+    make_shared<DynMovingObject>("helicalStructure");
   dynObj->primitiveType = ScenePart::PrimitiveType::TRIANGLE;
+  std::shared_ptr<Material> mat = std::make_shared<Material>();
+  Color4f color(0.6f, 0.6f, 0.0f, 1.0f);
+
+  // Upper surface
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-1.0, -1.0, 0.0, color),
+                 makeColoredVertex(1.0, -1.0, 0.0, color),
+                 makeColoredVertex(0.0, 0.0, 2.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(0.0, 0.0, 2.0, color),
+                 makeColoredVertex(1.0, -1.0, 0.0, color),
+                 makeColoredVertex(0.0, 1.0, 0.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-1.0, -1.0, 0.0, color),
+                 makeColoredVertex(0.0, 0.0, 2.0, color),
+                 makeColoredVertex(0.0, 1.0, 0.0, color),
+                 mat);
+  // Lower surface
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-1.0, -1.0, 0.0, color),
+                 makeColoredVertex(0.0, 0.0, -2.0, color),
+                 makeColoredVertex(1.0, -1.0, 0.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(0.0, 0.0, -2.0, color),
+                 makeColoredVertex(0.0, 1.0, 0.0, color),
+                 makeColoredVertex(1.0, -1.0, 0.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-1.0, -1.0, 0.0, color),
+                 makeColoredVertex(0.0, 1.0, 0.0, color),
+                 makeColoredVertex(0.0, 0.0, -2.0, color),
+                 mat);
   dynObj->computeCentroid();
   return dynObj;
 }
 shared_ptr<DynObject>
 SimplePrimitivesDemo::buildStaticStructure()
 {
-  vector<Primitive*> triangles(0);
-  // Bottom surface
-  triangles.push_back(new Triangle(Vertex(-1.0, 1.0, -10.0),
-                                   Vertex(1.0, -1.0, -10.0),
-                                   Vertex(-1.0, -1.0, -10.0)));
-  triangles.push_back(new Triangle(Vertex(-1.0, 1.0, -10.0),
-                                   Vertex(1.0, 1.0, -10.0),
-                                   Vertex(1.0, -1.0, -10.0)));
-  // Top surface
-  triangles.push_back(new Triangle(Vertex(-1.0, 1.0, 10.0),
-                                   Vertex(-1.0, -1.0, 10.0),
-                                   Vertex(1.0, -1.0, 10.0)));
-  triangles.push_back(new Triangle(
-    Vertex(-1.0, 1.0, 10.0), Vertex(1.0, -1.0, 10.0), Vertex(1.0, 1.0, 10.0)));
-  // Left surface
-  triangles.push_back(new Triangle(Vertex(-1.0, -1.0, -10.0),
-                                   Vertex(-1.0, -1.0, 10.0),
-                                   Vertex(-1.0, 1.0, 10.0)));
-  triangles.push_back(new Triangle(Vertex(-1.0, -1.0, -10.0),
-                                   Vertex(-1.0, 1.0, 10.0),
-                                   Vertex(-1.0, 1.0, -10.0)));
-  // Right surface
-  triangles.push_back(new Triangle(
-    Vertex(1.0, -1.0, -10.0), Vertex(1.0, 1.0, 10.0), Vertex(1.0, -1.0, 10.0)));
-  triangles.push_back(new Triangle(
-    Vertex(1.0, -1.0, -10.0), Vertex(1.0, 1.0, -10.0), Vertex(1.0, 1.0, 10.0)));
-  // Front face
-  triangles.push_back(new Triangle(Vertex(-1.0, -1.0, -10.0),
-                                   Vertex(1.0, -1.0, 10.0),
-                                   Vertex(-1.0, -1.0, 10.0)));
-  triangles.push_back(new Triangle(Vertex(-1.0, -1.0, -10.0),
-                                   Vertex(1.0, -1.0, -10.0),
-                                   Vertex(1.0, -1.0, 10.0)));
-  // Back face
-  triangles.push_back(new Triangle(
-    Vertex(-1.0, 1.0, -10.0), Vertex(-1.0, 1.0, 10.0), Vertex(1.0, 1.0, 10.0)));
-  triangles.push_back(new Triangle(
-    Vertex(-1.0, 1.0, -10.0), Vertex(1.0, 1.0, 10.0), Vertex(1.0, 1.0, -10.0)));
-
-  // Color and normals
-  for (Primitive* primitive : triangles) {
-    ((Triangle*)primitive)->update(); // Compute normal
-    ((Triangle*)primitive)->setAllVertexNormalsFromFace();
-    Vertex* vertices = primitive->getVertices();
-    for (size_t i = 0; i < primitive->getNumVertices(); ++i) {
-      Color4f& color = vertices[i].color;
-      color.x = 0.2;
-      color.y = 0.0;
-      color.z = 0.4;
-    }
-  }
-
-  // Dynamic object
   shared_ptr<DynObject> dynObj =
-    make_shared<DynMovingObject>("staticStructure", triangles);
+    make_shared<DynMovingObject>("staticStructure");
   dynObj->primitiveType = ScenePart::PrimitiveType::TRIANGLE;
+  std::shared_ptr<Material> mat = std::make_shared<Material>();
+  Color4f color(0.2f, 0.0f, 0.4f, 1.0f);
+
+  // Bottom surface
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-1.0, 1.0, -10.0, color),
+                 makeColoredVertex(1.0, -1.0, -10.0, color),
+                 makeColoredVertex(-1.0, -1.0, -10.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-1.0, 1.0, -10.0, color),
+                 makeColoredVertex(1.0, 1.0, -10.0, color),
+                 makeColoredVertex(1.0, -1.0, -10.0, color),
+                 mat);
+  // Top surface
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-1.0, 1.0, 10.0, color),
+                 makeColoredVertex(-1.0, -1.0, 10.0, color),
+                 makeColoredVertex(1.0, -1.0, 10.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-1.0, 1.0, 10.0, color),
+                 makeColoredVertex(1.0, -1.0, 10.0, color),
+                 makeColoredVertex(1.0, 1.0, 10.0, color),
+                 mat);
+  // Left surface
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-1.0, -1.0, -10.0, color),
+                 makeColoredVertex(-1.0, -1.0, 10.0, color),
+                 makeColoredVertex(-1.0, 1.0, 10.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-1.0, -1.0, -10.0, color),
+                 makeColoredVertex(-1.0, 1.0, 10.0, color),
+                 makeColoredVertex(-1.0, 1.0, -10.0, color),
+                 mat);
+  // Right surface
+  appendTriangle(*dynObj,
+                 makeColoredVertex(1.0, -1.0, -10.0, color),
+                 makeColoredVertex(1.0, 1.0, 10.0, color),
+                 makeColoredVertex(1.0, -1.0, 10.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(1.0, -1.0, -10.0, color),
+                 makeColoredVertex(1.0, 1.0, -10.0, color),
+                 makeColoredVertex(1.0, 1.0, 10.0, color),
+                 mat);
+  // Front face
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-1.0, -1.0, -10.0, color),
+                 makeColoredVertex(1.0, -1.0, 10.0, color),
+                 makeColoredVertex(-1.0, -1.0, 10.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-1.0, -1.0, -10.0, color),
+                 makeColoredVertex(1.0, -1.0, -10.0, color),
+                 makeColoredVertex(1.0, -1.0, 10.0, color),
+                 mat);
+  // Back face
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-1.0, 1.0, -10.0, color),
+                 makeColoredVertex(-1.0, 1.0, 10.0, color),
+                 makeColoredVertex(1.0, 1.0, 10.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-1.0, 1.0, -10.0, color),
+                 makeColoredVertex(1.0, 1.0, 10.0, color),
+                 makeColoredVertex(1.0, 1.0, -10.0, color),
+                 mat);
   dynObj->computeCentroid();
   return dynObj;
 }
@@ -362,30 +436,23 @@ SimplePrimitivesDemo::buildStaticStructure()
 shared_ptr<DynObject>
 SimplePrimitivesDemo::buildGroundStructure()
 {
-  vector<Primitive*> triangles(0);
-  // Ground surface
-  triangles.push_back(new Triangle(Vertex(-50.0, -50.0, 0.0),
-                                   Vertex(-50.0, 50.0, 0.0),
-                                   Vertex(50.0, 50.0, 0.0)));
-  triangles.push_back(new Triangle(Vertex(50.0, 50.0, 0.0),
-                                   Vertex(50.0, -50.0, 0.0),
-                                   Vertex(-50.0, -50.0, 0.0)));
-
-  // Color
-  for (Primitive* primitive : triangles) {
-    Vertex* vertices = primitive->getVertices();
-    for (size_t i = 0; i < primitive->getNumVertices(); ++i) {
-      Color4f& color = vertices[i].color;
-      color.x = 0.5;
-      color.y = 0.5;
-      color.z = 0.5;
-    }
-  }
-
-  // Dynamic object
   shared_ptr<DynObject> dynObj =
-    make_shared<DynMovingObject>("groundStructure", triangles);
+    make_shared<DynMovingObject>("groundStructure");
   dynObj->primitiveType = ScenePart::PrimitiveType::TRIANGLE;
+  std::shared_ptr<Material> mat = std::make_shared<Material>();
+  Color4f color(0.5f, 0.5f, 0.5f, 1.0f);
+
+  // Ground surface
+  appendTriangle(*dynObj,
+                 makeColoredVertex(-50.0, -50.0, 0.0, color),
+                 makeColoredVertex(-50.0, 50.0, 0.0, color),
+                 makeColoredVertex(50.0, 50.0, 0.0, color),
+                 mat);
+  appendTriangle(*dynObj,
+                 makeColoredVertex(50.0, 50.0, 0.0, color),
+                 makeColoredVertex(50.0, -50.0, 0.0, color),
+                 makeColoredVertex(-50.0, -50.0, 0.0, color),
+                 mat);
   dynObj->computeCentroid();
   return dynObj;
 }

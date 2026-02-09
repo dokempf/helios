@@ -172,10 +172,9 @@ readScenePartFromXml(std::string filePath,
   ScenePart::computeTransformations(scenePart, holistic);
 
   // Infer type of primitive for the scene part
-  auto numVertices = scenePart->mPrimitives[0]->getNumVertices();
-  if (numVertices == 3)
+  if (!scenePart->triangles.vertices.empty())
     scenePart->primitiveType = ScenePart::TRIANGLE;
-  else
+  else if (!scenePart->voxels.centers.empty())
     scenePart->primitiveType = ScenePart::VOXEL;
 
   if (!xmlSceneLoader.validateScenePart(scenePart, part)) {
