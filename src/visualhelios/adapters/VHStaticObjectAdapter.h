@@ -36,7 +36,7 @@ protected:
    * @brief Static object vertices connection specification through ordered
    *  indices for visualization purposes.
    *
-   * It is, how the vertices must be connected to render each primitive in
+   * It is, how the vertices must be connected to render each geometry in
    *  the polygon mesh.
    */
   vector<pcl::Vertices> vertices;
@@ -63,7 +63,7 @@ public:
   // ***  BUILDING  *** //
   // ****************** //
   /**
-   * @brief Build the polygon mesh from static object primitives. This
+   * @brief Build the polygon mesh from static object geometry. This
    *  implies building corresponding vertices vector too.
    *
    * @see VHStaticObjectAdapter::polymesh
@@ -86,7 +86,7 @@ public:
    * @brief Add a vertex to the polymesh.
    *
    * The buildPolymesh method requires to call this function to generate
-   *  points/vertices defining the mesh from static object primitives.
+   *  points/vertices defining the mesh from static object geometry.
    *  Therefore, any concrete implementation of a VHStaticObjectAdapter must
    *  provide its own definition for this method.
    *
@@ -100,23 +100,23 @@ public:
   // ***  UTILS  *** //
   // *************** //
   /**
-   * @brief Function to add triangle primitives to the polymesh during
+   * @brief Function to add triangle geometry to the polymesh during
    *  building time
-   * @param primitive The triangle primitive to be added
+   * @param geometryIndex Index of the triangle geometry to be added
    * @param offset The offset for vertex index at current iteration
    * @see VHStaticObjectAdapter::buildPolymesh
    * @see VHStaticObjectAdapter::addVoxelToPolymesh
    */
-  virtual void addTriangleToPolymesh(Primitive* primitive, int& offset);
+  virtual void addTriangleToPolymesh(std::size_t geometryIndex, int& offset);
   /**
-   * @brief Function to add voxel primitives to the polymesh during
+   * @brief Function to add voxel geometry to the polymesh during
    *  building time
-   * @param primitive The triangle primitive to be added
+   * @param geometryIndex Index of the voxel geometry to be added
    * @param offset The offset for vertex index at current iteration
    * @see VHStaticObjectAdapter::buildPolymesh
    * @see VHStaticObjectAdapter::addTriangleToPolymesh
    */
-  virtual void addVoxelToPolymesh(Primitive* primitive, int& offset);
+  virtual void addVoxelToPolymesh(std::size_t geometryIndex, int& offset);
 
   // ***  GETTERS and SETTERS  *** //
   // ***************************** //

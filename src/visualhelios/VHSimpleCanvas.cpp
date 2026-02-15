@@ -1,6 +1,5 @@
 #ifdef PCL_BINDING
 
-#include <Primitive.h>
 #include <visualhelios/VHSimpleCanvas.h>
 
 #include <sstream>
@@ -81,24 +80,26 @@ VHSimpleCanvas::renderNormals(VHStaticObjectAdapter& staticObj)
 {
   if (!staticObj.isRenderingNormals())
     return;
-  vector<Primitive*> const primitives =
-    staticObj.getStaticObj().getPrimitives();
-  for (size_t i = 0; i < primitives.size(); ++i) {
-    Primitive* primitive = primitives[i];
+  ScenePart const& part = staticObj.getStaticObj();
+  for (std::size_t i = 0; i < part.geometryCount(); ++i) {
+    std::size_t const nv = part.geometryDynamicVertexCount(i);
+    if (nv == 0) {
+      continue;
+    }
     float nx = 0;
     float ny = 0;
     float nz = 0;
-    pcl::PointXYZ p, q;
-    Vertex* vertices = primitive->getVertices();
-    float const numVerticesf = (float)primitive->getNumVertices();
-    for (size_t j = 0; j < primitive->getNumVertices(); ++j) {
-      Vertex& vertex = vertices[j];
-      nx += vertex.normal.x;
-      ny += vertex.normal.y;
-      nz += vertex.normal.z;
-      p.x += vertex.pos.x;
-      p.y += vertex.pos.y;
-      p.z += vertex.pos.z;
+    pcl::PointXYZ p(0.0f, 0.0f, 0.0f), q(0.0f, 0.0f, 0.0f);
+    float const numVerticesf = static_cast<float>(nv);
+    for (std::size_t j = 0; j < nv; ++j) {
+      glm::dvec3 const normal = part.geometryDynamicVertexNormal(i, j);
+      glm::dvec3 const position = part.geometryDynamicVertexPosition(i, j);
+      nx += static_cast<float>(normal.x);
+      ny += static_cast<float>(normal.y);
+      nz += static_cast<float>(normal.z);
+      p.x += static_cast<float>(position.x);
+      p.y += static_cast<float>(position.y);
+      p.z += static_cast<float>(position.z);
     }
     nx /= numVerticesf;
     ny /= numVerticesf;
@@ -123,8 +124,8 @@ VHSimpleCanvas::unrenderAllNormals()
   for (shared_ptr<VHDynObjectXYZRGBAdapter> const& dynObj : dynObjs) {
     if (!dynObj->isRenderingNormals())
       continue; // Skip, nothing to remove
-    vector<Primitive*> const primitives = dynObj->getDynObj().getPrimitives();
-    for (size_t i = 0; i < primitives.size(); ++i) {
+    ScenePart const& part = dynObj->getDynObj();
+    for (std::size_t i = 0; i < part.geometryCount(); ++i) {
       std::stringstream ss;
       ss << dynObj->getId() << "_normal" << i;
       viewer->removeShape(ss.str());

@@ -172,11 +172,19 @@ readScenePartFromXml(std::string filePath,
   ScenePart::computeTransformations(scenePart, holistic);
 
   // Infer type of primitive for the scene part
-  auto numVertices = scenePart->mPrimitives[0]->getNumVertices();
+  if (scenePart->geometryCount() == 0) {
+    logging::ERR("Error: Scene part has no primitives");
+    return nullptr;
+  }
+  std::size_t const numVertices = scenePart->geometryVertexCount(0);
+  if (numVertices == 0) {
+    logging::ERR("Error: Scene part first primitive has zero vertices");
+    return nullptr;
+  }
   if (numVertices == 3)
-    scenePart->primitiveType = ScenePart::TRIANGLE;
+    scenePart->geometryType = ScenePart::TRIANGLE;
   else
-    scenePart->primitiveType = ScenePart::VOXEL;
+    scenePart->geometryType = ScenePart::VOXEL;
 
   if (!xmlSceneLoader.validateScenePart(scenePart, part)) {
     logging::ERR("Error: Invalid scene part");

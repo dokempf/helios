@@ -23,7 +23,7 @@ SparseVoxelGrid::hasVoxel(std::size_t const key)
   return map.find(key) != map.cend();
 }
 
-Voxel*
+VoxelGridVoxel*
 SparseVoxelGrid::getVoxel(std::size_t const key)
 {
   try {
@@ -33,15 +33,18 @@ SparseVoxelGrid::getVoxel(std::size_t const key)
   }
 }
 
-Voxel*
+VoxelGridVoxel*
 SparseVoxelGrid::setVoxel(std::size_t const key,
                           double const x,
                           double const y,
                           double const z,
                           double halfVoxelSize)
 {
-  Voxel* voxel = new Voxel(x, y, z, halfVoxelSize);
+  VoxelGridVoxel* voxel = new VoxelGridVoxel();
+  voxel->center = glm::dvec3(x, y, z);
+  voxel->halfSize = halfVoxelSize;
   VoxelGridCell& vgc = map[key];
+  delete vgc.voxel;
   vgc.voxel = voxel;
   return voxel;
 }
@@ -50,7 +53,7 @@ void
 SparseVoxelGrid::deleteVoxel(std::size_t const key)
 {
   VoxelGridCell& vgc = map.at(key);
-  Voxel* voxel = vgc.voxel;
+  VoxelGridVoxel* voxel = vgc.voxel;
   if (voxel == nullptr)
     return;
   delete voxel;
@@ -159,11 +162,11 @@ SparseVoxelGrid::whileLoopHasNext()
   return whileLoopIter != map.end();
 }
 
-Voxel*
+VoxelGridVoxel*
 SparseVoxelGrid::whileLoopNext(std::size_t* key)
 {
   // Obtain current voxel
-  Voxel* voxel = whileLoopIter->second.voxel;
+  VoxelGridVoxel* voxel = whileLoopIter->second.voxel;
   // Obtain the matrix, if requested
   if (key != nullptr)
     *key = whileLoopIter->first;

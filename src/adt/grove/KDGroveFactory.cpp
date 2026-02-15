@@ -169,6 +169,21 @@ KDGroveFactory::makeCommon(std::vector<std::shared_ptr<ScenePart>> parts,
                            bool const computeKDTreeStats,
                            bool const reportKDTreeStats)
 {
+  auto collectPartRefs = [](std::shared_ptr<ScenePart> const& part) {
+    std::vector<GeometryRef> out;
+    if (part == nullptr) {
+      return out;
+    }
+    out.reserve(part->geometryCount());
+    for (std::size_t i = 0; i < part->geometryCount(); ++i) {
+      GeometryRef ref{ part, i };
+      if (ref.isValid()) {
+        out.push_back(ref);
+      }
+    }
+    return out;
+  };
+
   // Prepare KDGrove building
   std::shared_ptr<KDGrove> kdgrove = std::make_shared<KDGrove>();
   kdgrove->setStats(computeKDGroveStats ? std::make_shared<KDGroveStats>()
@@ -178,13 +193,17 @@ KDGroveFactory::makeCommon(std::vector<std::shared_ptr<ScenePart>> parts,
 
   // Build each KDTree
   for (std::shared_ptr<ScenePart>& part : parts) {
+    if (part == nullptr) {
+      continue;
+    }
     TimeWatcher tw;
     tw.start();
+    std::vector<GeometryRef> partRefs = collectPartRefs(part);
     std::shared_ptr<KDTreeNodeRoot> kdtree = std::shared_ptr<KDTreeNodeRoot>(
-      safe ? kdtf->makeFromPrimitives(
-               part->mPrimitives, computeKDTreeStats, reportKDTreeStats)
-           : kdtf->makeFromPrimitivesUnsafe(
-               part->mPrimitives, computeKDTreeStats, reportKDTreeStats));
+      safe ? kdtf->makeFromGeometryRefs(
+               partRefs, computeKDTreeStats, reportKDTreeStats)
+           : kdtf->makeFromGeometryRefsUnsafe(
+               partRefs, computeKDTreeStats, reportKDTreeStats));
     KDGroveSubject* subject = nullptr;
     if (part->getType() == ScenePart::ObjectType::DYN_MOVING_OBJECT) {
       subject = (DynMovingObject*)part.get();
@@ -196,7 +215,7 @@ KDGroveFactory::makeCommon(std::vector<std::shared_ptr<ScenePart>> parts,
         kdtree, std::shared_ptr<KDTreeFactory>(kdtf->clone())));
     tw.stop();
     buildingTimes.push_back(tw.getElapsedDecimalSeconds());
-    numPrimitives.push_back(part->getPrimitives().size());
+    numPrimitives.push_back(partRefs.size());
   }
 
   // Compute and report KDGrove stats (if requested)
@@ -234,33 +253,73 @@ KDGroveFactory::makeMergeNonMoving(
   bool const computeKDTreeStats,
   bool const reportKDTreeStats)
 {
-  // Prepare merged non moving scene parts
-  std::vector<std::shared_ptr<ScenePart>> parts;
-  std::vector<Primitive*> mergedPrimitives;
-  for (std::shared_ptr<ScenePart> part : _parts) {
-    // Consider moving objects directly
-    if (part->getType() == ScenePart::ObjectType::DYN_MOVING_OBJECT) {
-      parts.push_back(part);
+  auto collectPartRefs = [](std::shared_ptr<ScenePart> const& part) {
+    std::vector<GeometryRef> out;
+    if (part == nullptr) {
+      return out;
+    }
+    out.reserve(part->geometryCount());
+    for (std::size_t i = 0; i < part->geometryCount(); ++i) {
+      GeometryRef ref{ part, i };
+      if (ref.isValid()) {
+        out.push_back(ref);
+      }
+    }
+    return out;
+  };
+
+  std::shared_ptr<KDGrove> kdgrove = std::make_shared<KDGrove>();
+  kdgrove->setStats(computeKDGroveStats ? std::make_shared<KDGroveStats>()
+                                        : nullptr);
+  std::vector<double> buildingTimes;
+  std::vector<int> numPrimitives;
+
+  auto buildTree = [&](std::vector<GeometryRef>& refs,
+                       std::shared_ptr<ScenePart> const& part) {
+    TimeWatcher tw;
+    tw.start();
+    std::shared_ptr<KDTreeNodeRoot> kdtree = std::shared_ptr<KDTreeNodeRoot>(
+      safe ? kdtf->makeFromGeometryRefs(
+               refs, computeKDTreeStats, reportKDTreeStats)
+           : kdtf->makeFromGeometryRefsUnsafe(
+               refs, computeKDTreeStats, reportKDTreeStats));
+    KDGroveSubject* subject = nullptr;
+    if (part != nullptr &&
+        part->getType() == ScenePart::ObjectType::DYN_MOVING_OBJECT) {
+      subject = (DynMovingObject*)part.get();
+      subject->registerObserverGrove(kdgrove);
+    }
+    kdgrove->addSubject(
+      subject,
+      std::make_shared<GroveKDTreeRaycaster>(
+        kdtree, std::shared_ptr<KDTreeFactory>(kdtf->clone())));
+    tw.stop();
+    buildingTimes.push_back(tw.getElapsedDecimalSeconds());
+    numPrimitives.push_back(refs.size());
+  };
+
+  std::vector<GeometryRef> mergedRefs;
+  for (std::shared_ptr<ScenePart> const& part : _parts) {
+    if (part == nullptr) {
       continue;
     }
-    // Extract primitives from non moving objects
-    std::vector<Primitive*> const& partPrimitives = part->getPrimitives();
-    mergedPrimitives.insert(
-      mergedPrimitives.end(), partPrimitives.cbegin(), partPrimitives.cend());
+    std::vector<GeometryRef> partRefs = collectPartRefs(part);
+    if (part->getType() == ScenePart::ObjectType::DYN_MOVING_OBJECT) {
+      buildTree(partRefs, part);
+    } else {
+      mergedRefs.insert(mergedRefs.end(), partRefs.begin(), partRefs.end());
+    }
+  }
+  if (!mergedRefs.empty()) {
+    buildTree(mergedRefs, nullptr);
   }
 
-  // Insert merged scene part, if any
-  if (mergedPrimitives.size() > 0) {
-    std::shared_ptr<ScenePart> mergedPart = std::make_shared<ScenePart>();
-    mergedPart->setPrimitives(mergedPrimitives);
-    parts.push_back(mergedPart);
+  if (computeKDGroveStats) {
+    handleKDGroveStats(kdgrove, buildingTimes, numPrimitives);
+    if (reportKDGroveStats) {
+      logging::INFO(kdgrove->getStats()->toString());
+    }
   }
 
-  // Common make
-  return makeCommon(parts,
-                    safe,
-                    computeKDGroveStats,
-                    reportKDGroveStats,
-                    computeKDTreeStats,
-                    reportKDTreeStats);
+  return kdgrove;
 }

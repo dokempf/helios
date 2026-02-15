@@ -94,8 +94,8 @@ public:
    * @param sp Scene part as basis for dynamic object
    * @see ScenePart::ScenePart(ScenePart const &, bool const)
    */
-  DynObject(ScenePart const& sp, bool const shallowPrimitives = false)
-    : ScenePart(sp, shallowPrimitives)
+  DynObject(ScenePart const& sp, bool const shallowGeometry = false)
+    : ScenePart(sp, shallowGeometry)
     , stepLoop(1, [&]() -> bool { return doSimStep(); })
     , dynTimeStep(std::numeric_limits<double>::quiet_NaN())
   {
@@ -110,31 +110,6 @@ public:
     , dynTimeStep(std::numeric_limits<double>::quiet_NaN())
   {
     setId(id);
-  }
-  /**
-   * @brief Dynamic object constructor with primitives as argument
-   * @param primitives The primitives defining the dynamic object
-   * @see DynObject::primitives
-   */
-  DynObject(std::vector<Primitive*> const& primitives)
-    : stepLoop(1, [&]() -> bool { return doSimStep(); })
-    , dynTimeStep(std::numeric_limits<double>::quiet_NaN())
-  {
-    setPrimitives(primitives);
-  }
-  /**
-   * @brief Dynamic object constructor with id and primitives as arguments
-   * @param id The id for the dynamic object
-   * @param primitives The primitives defining the dynamic object
-   * @see DynObject::id
-   * @see DynObject::primitives
-   */
-  DynObject(std::string const id, std::vector<Primitive*> const& primitives)
-    : stepLoop(1, [&]() -> bool { return doSimStep(); })
-    , dynTimeStep(std::numeric_limits<double>::quiet_NaN())
-  {
-    setId(id);
-    setPrimitives(primitives);
   }
   virtual ~DynObject() = default;
 
@@ -203,22 +178,22 @@ public:
    *
    * @return Position matrix
    */
-  arma::mat positionMatrixFromPrimitives() const;
+  arma::mat positionMatrixFromGeometry() const;
   /**
-   * @brief Like DynObject::positionMatrixFromPrimitives but receiving
+   * @brief Like DynObject::positionMatrixFromGeometry but receiving
    *  the total number of vertices beforehand
    *
    * It can increase efficiency when the number of primitives defining the
    *  dynamic object remains the same by caching the countVertices method
    *  output and passing it as \f$m\f$. Otherwise, it will be computed for
-   *  each call of positionMatrixFromPrimitives method which implies
+   *  each call of positionMatrixFromGeometry method which implies
    *  iterating through vertices of each primitive.
    *
    * @param m Total number of vertices
-   * @see DynObject::positionMatrixFromPrimitives
+   * @see DynObject::positionMatrixFromGeometry
    * @see DynObject::countVertices
    */
-  arma::mat positionMatrixFromPrimitives(std::size_t const m) const;
+  arma::mat positionMatrixFromGeometry(std::size_t const m) const;
   /**
    * @brief Obtain the normal matrix for primitives defining the dynamic
    *  object
@@ -233,22 +208,22 @@ public:
    *
    * @return Normal matrix
    */
-  arma::mat normalMatrixFromPrimitives() const;
+  arma::mat normalMatrixFromGeometry() const;
   /**
-   * @brief Like DynObject::normalMatrixFromPrimitives but receiving
+   * @brief Like DynObject::normalMatrixFromGeometry but receiving
    *  the total number of vertices beforehand.
    *
    * It can increase efficiency when the number of primitives defining the
    *  dynamic object remains the same by caching the countVertices method
    *  output and passing it as \f$m\f$. Otherwise, it will be computed for
-   *  each call of normalMatrixFromPrimitives method which implies iterating
+   *  each call of normalMatrixFromGeometry method which implies iterating
    *  through vertices of each primitive.
    *
    * @param m Total number of vertices
-   * @see DynObject::normalMatrixFromPrimitives
+   * @see DynObject::normalMatrixFromGeometry
    * @see DynObject::countVertices
    */
-  arma::mat normalMatrixFromPrimitives(std::size_t const m) const;
+  arma::mat normalMatrixFromGeometry(std::size_t const m) const;
   /**
    * @brief Update the position of each primitive with given matrix
    *
@@ -259,24 +234,24 @@ public:
    *  the new position of the \f$j\f$-th primitive.
    *
    * @param X The position matrix containing new coordinates
-   * @see updatePrimitivesPositionFromMatrix(size_t const, arma::mat const &)
+   * @see updateGeometryPositionFromMatrix(size_t const, arma::mat const &)
    */
-  void updatePrimitivesPositionFromMatrix(arma::mat const& X);
+  void updateGeometryPositionFromMatrix(arma::mat const& X);
   /**
-   * @brief Like updatePrimitivesPositionFromMatrix(arma::mat const &) but
+   * @brief Like updateGeometryPositionFromMatrix(arma::mat const &) but
    *  receiving the total number of vertices beforehand
    *
    * It can increase efficiency when the number of primitives defining the
    *  dynamic object remains the same by caching the countVertices method
    *  output and passing as \f$m\f$. Otherwise, it will be computed for each
-   *  call of updatePrimitivesPositionFromMatrix method which implies
+   *  call of updateGeometryPositionFromMatrix method which implies
    *  iterating through vertices of each primitive.
    *
    * @param m Total number of vertices
-   * @see updatePrimitivesPositionFromMatrix(arma::mat const &)
+   * @see updateGeometryPositionFromMatrix(arma::mat const &)
    */
-  void updatePrimitivesPositionFromMatrix(std::size_t const m,
-                                          arma::mat const& X);
+  void updateGeometryPositionFromMatrix(std::size_t const m,
+                                        arma::mat const& X);
   /**
    * @brief Update the normal of each primitive with given matrix
    *
@@ -287,24 +262,23 @@ public:
    *  new normal of the \f$j\f$-th primitive.
    *
    * @param X The normal matrix containing new components
-   * @see updatePrimitivesNormalFromMatrix(size_t const, arma::mat const &)
+   * @see updateGeometryNormalFromMatrix(size_t const, arma::mat const &)
    */
-  void updatePrimitivesNormalFromMatrix(arma::mat const& X);
+  void updateGeometryNormalFromMatrix(arma::mat const& X);
   /**
-   * @brief Like updatePrimitivesNormalFromMatrix(arma::mat const &) but
+   * @brief Like updateGeometryNormalFromMatrix(arma::mat const &) but
    *  receiving the total number of vertices beforehand
    *
    * It can increase efficiency when the number of primitives defining the
    *  dynamic object remains the same by caching the countVertices method
    *  output and passing as \f$m\f$. Otherwise, it will be computed for each
-   *  call of updatePrimitivesNormalFromMatrix method which implies iterating
+   *  call of updateGeometryNormalFromMatrix method which implies iterating
    *  through vertices of each primitive.
    *
    * @param m Total number of vertices
-   * @see updatePrimitivesNormalFromMatrix(arma::mat const &)
+   * @see updateGeometryNormalFromMatrix(arma::mat const &)
    */
-  void updatePrimitivesNormalFromMatrix(std::size_t const m,
-                                        arma::mat const& X);
+  void updateGeometryNormalFromMatrix(std::size_t const m, arma::mat const& X);
 
 protected:
   /**
@@ -335,25 +309,25 @@ protected:
    *  be inserted in the matrix
    * @return Built matrix
    */
-  arma::mat matrixFromPrimitives(
-    std::function<arma::colvec(Vertex const*)> get) const;
+  arma::mat matrixFromGeometry(
+    std::function<arma::colvec(std::size_t, std::size_t)> get) const;
   /**
-   * @brief Like DynObject::matrixFromPrimitives but receiving the total
+   * @brief Like DynObject::matrixFromGeometry but receiving the total
    *  number of vertices beforehand
    *
    * It can increase efficiency when the number of primitives defining the
    *  dynamic object remains the same by caching the countVertices method
    *  output and passing it as \f$m\f$. Otherwise, it will be computed for
-   *  each call of matrixFromPrimitives method which implies iterating
+   *  each call of matrixFromGeometry method which implies iterating
    *  through vertices of each primitive.
    *
    * @param m Total number of vertices
-   * @see DynObject::matrixFromPrimitives
+   * @see DynObject::matrixFromGeometry
    * @see DynObject::countVertices
    */
-  arma::mat matrixFromPrimitives(
+  arma::mat matrixFromGeometry(
     std::size_t const m,
-    std::function<arma::colvec(Vertex const*)> get) const;
+    std::function<arma::colvec(std::size_t, std::size_t)> get) const;
   /**
    * @brief Update primitives defining the dynamic object from given matrix.
    *
@@ -382,25 +356,27 @@ protected:
    * @param X Matrix containing necessary data to update vertices. Each
    *  column contains the data for its corresponding vertex
    */
-  void matrixToPrimitives(std::function<void(Vertex*, arma::colvec const&)> set,
-                          arma::mat const& X);
+  void matrixToGeometry(
+    std::function<void(std::size_t, std::size_t, arma::colvec const&)> set,
+    arma::mat const& X);
   /**
-   * @brief Like DynObject::matrixToPrimitives but receiving the total
+   * @brief Like DynObject::matrixToGeometry but receiving the total
    *  number of vertices beforehand
    *
    * It can increase efficiency when the number of primitives defining the
    *  dynamic object remains the same by caching the countVertices method
    *  output and passing it as \f$m\f$. Otherwise, it will be computed for
-   *  each call of matrixToPrimitives method which implies iterating
+   *  each call of matrixToGeometry method which implies iterating
    *  through vertices of each primitive.
    *
    * @param m Total number of vertices
-   * @see DynObject::matrixToPrimitives
+   * @see DynObject::matrixToGeometry
    * @see DynObject::countVertices
    */
-  void matrixToPrimitives(std::size_t const m,
-                          std::function<void(Vertex*, arma::colvec const&)> set,
-                          arma::mat const& X);
+  void matrixToGeometry(
+    std::size_t const m,
+    std::function<void(std::size_t, std::size_t, arma::colvec const&)> set,
+    arma::mat const& X);
 
 public:
   // ***  GETTERs and SETTERs  *** //

@@ -1,6 +1,6 @@
 #include "KDTreeNode.h"
+#include "KDTreeGeometryComparator.h"
 #include "KDTreeNodeRoot.h"
-#include "KDTreePrimitiveComparator.h"
 #include <SerialIO.h>
 #include <serial.h>
 

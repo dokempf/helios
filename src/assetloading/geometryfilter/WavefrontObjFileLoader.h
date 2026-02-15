@@ -2,6 +2,7 @@
 
 #include "AbstractGeometryFilter.h"
 #include "WavefrontObj.h"
+#include <TriangleScenePart.h>
 #include <glm/glm.hpp>
 
 /**
@@ -22,7 +23,7 @@ public:
    * @see AbstractGeometryFilter::AbstractGeometryFilter(ScenePart*)
    */
   WavefrontObjFileLoader()
-    : AbstractGeometryFilter(new ScenePart())
+    : AbstractGeometryFilter(new TriangleScenePart())
   {
   }
 

@@ -1,8 +1,8 @@
 #include "GeoTiffFileLoader.h"
-#include <Triangle.h>
 #include <Vertex.h>
 #include <boost/variant/get.hpp>
 #include <fstream>
+#include <glm/geometric.hpp>
 #include <logging.hpp>
 #include <ogrsf_frmts.h>
 #include <sstream>
@@ -40,7 +40,6 @@ GeoTiffFileLoader::run()
 
     // Finish primsOut
     primsOut->mEnv = env;
-    primsOut->smoothVertexNormals();
 
     // Release vertices
     releaseVertices();
@@ -219,8 +218,8 @@ GeoTiffFileLoader::loadMaterial()
     mat = matvec[0];
 
   // Assign material
-  for (Primitive* primitive : primsOut->mPrimitives) {
-    primitive->material = mat;
+  for (std::size_t i = 0; i < primsOut->geometryCount(); ++i) {
+    primsOut->setGeometryMaterial(i, mat);
   }
 }
 
@@ -239,23 +238,72 @@ GeoTiffFileLoader::releaseVertices()
 void
 GeoTiffFileLoader::buildTriangles()
 {
-  Triangle *tri1, *tri2;
-  Vertex *vert0, *vert1, *vert2, *vert3;
+  TriangleScenePart* const trianglePart =
+    dynamic_cast<TriangleScenePart*>(primsOut);
+  if (trianglePart == nullptr) {
+    return;
+  }
+
+  auto hasTriangle = [](Vertex* a, Vertex* b, Vertex* c) {
+    return a != nullptr && b != nullptr && c != nullptr;
+  };
+
+  std::size_t triangleCount = 0;
   for (int x = 0; x < rasterWidth - 1; ++x) {
     for (int y = 0; y < rasterHeight - 1; ++y) {
-      vert0 = vertices[x][y];
-      vert1 = vertices[x][y + 1];
-      vert2 = vertices[x + 1][y + 1];
-      vert3 = vertices[x + 1][y];
+      Vertex* const vert0 = vertices[x][y];
+      Vertex* const vert1 = vertices[x][y + 1];
+      Vertex* const vert2 = vertices[x + 1][y + 1];
+      Vertex* const vert3 = vertices[x + 1][y];
+      triangleCount += hasTriangle(vert0, vert1, vert3) ? 1 : 0;
+      triangleCount += hasTriangle(vert1, vert2, vert3) ? 1 : 0;
+    }
+  }
 
-      if (vert0 != nullptr && vert1 != nullptr && vert3 != nullptr) {
-        tri1 = new Triangle(*vert0, *vert1, *vert3);
-        primsOut->mPrimitives.push_back(tri1);
+  trianglePart->vertices.set_size(triangleCount, 9);
+  trianglePart->normals.zeros(triangleCount, 9);
+  trianglePart->materialIndex.zeros(triangleCount);
+  trianglePart->materialTable.clear();
+
+  auto writeTriangle =
+    [&](std::size_t row, Vertex const& a, Vertex const& b, Vertex const& c) {
+      trianglePart->vertices(row, 0) = a.pos.x;
+      trianglePart->vertices(row, 1) = a.pos.y;
+      trianglePart->vertices(row, 2) = a.pos.z;
+      trianglePart->vertices(row, 3) = b.pos.x;
+      trianglePart->vertices(row, 4) = b.pos.y;
+      trianglePart->vertices(row, 5) = b.pos.z;
+      trianglePart->vertices(row, 6) = c.pos.x;
+      trianglePart->vertices(row, 7) = c.pos.y;
+      trianglePart->vertices(row, 8) = c.pos.z;
+
+      glm::dvec3 n = glm::cross(b.pos - a.pos, c.pos - a.pos);
+      if (glm::length(n) > 0.0) {
+        n = glm::normalize(n);
+      }
+      for (std::size_t j = 0; j < 3; ++j) {
+        trianglePart->normals(row, j * 3) = n.x;
+        trianglePart->normals(row, j * 3 + 1) = n.y;
+        trianglePart->normals(row, j * 3 + 2) = n.z;
+      }
+    };
+
+  std::size_t row = 0;
+  for (int x = 0; x < rasterWidth - 1; ++x) {
+    for (int y = 0; y < rasterHeight - 1; ++y) {
+      Vertex* const vert0 = vertices[x][y];
+      Vertex* const vert1 = vertices[x][y + 1];
+      Vertex* const vert2 = vertices[x + 1][y + 1];
+      Vertex* const vert3 = vertices[x + 1][y];
+
+      if (hasTriangle(vert0, vert1, vert3)) {
+        writeTriangle(row, *vert0, *vert1, *vert3);
+        ++row;
       }
 
-      if (vert1 != nullptr && vert2 != nullptr && vert3 != nullptr) {
-        tri2 = new Triangle(*vert1, *vert2, *vert3);
-        primsOut->mPrimitives.push_back(tri2);
+      if (hasTriangle(vert1, vert2, vert3)) {
+        writeTriangle(row, *vert1, *vert2, *vert3);
+        ++row;
       }
     }
   }

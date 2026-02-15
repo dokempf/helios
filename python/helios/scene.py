@@ -373,40 +373,39 @@ class ScenePart(Model, cpp_class=_helios.ScenePart):
         return cls._from_cpp(_cpp_part)
 
     @validate_call
-    def _apply_material_to_all_primitives(self, material: Material):
-        """Apply a material to all primitives in the scene part."""
+    def _apply_material_to_all_geometry(self, material: Material):
+        """Apply a material to all geometry elements in the scene part."""
         range_start = 0
-        range_stop = len(self._cpp_object.primitives) - 1
-        _helios.apply_material_to_primitives_range(
+        range_stop = self._cpp_object.num_geometry_refs - 1
+        _helios.apply_material_to_geometry_range(
             self._cpp_object, material._cpp_object, range_start, range_stop
         )
 
     @validate_call
-    def _apply_material_to_primitives_in_specific_range(
+    def _apply_material_to_geometry_in_specific_range(
         self, material: Material, start: int, stop: int
     ):
-        """Apply a material to all primitives within a specific elevation range in the scene part."""
+        """Apply a material to all geometry in a specific elevation range."""
         if start < 0 or stop < start:
             raise ValueError("Provided range is invalid")
 
         range_start = start
-        range_stop = min(stop, len(self._cpp_object.primitives) - 1)
-        _helios.apply_material_to_primitives_range(
+        range_stop = min(stop, self._cpp_object.num_geometry_refs - 1)
+        _helios.apply_material_to_geometry_range(
             self._cpp_object, material._cpp_object, range_start, range_stop
         )
 
     @validate_call
     def _apply_material_to_indices(self, material: Material, indices: list[int]):
-        """Apply a material to primitives at specific indices in the scene part."""
-        valid_indices = [
-            i for i in indices if 0 <= i < len(self._cpp_object.primitives)
-        ]
+        """Apply a material to geometry at specific indices in the scene part."""
+        geometry_count = self._cpp_object.num_geometry_refs
+        valid_indices = [i for i in indices if 0 <= i < geometry_count]
         if not valid_indices:
             raise IndexError(
-                "No valid indices provided. Indices must be within the range of existing primitives."
+                "No valid indices provided. Indices must be within the range of existing geometry."
             )
 
-        _helios.apply_material_to_primitives_indices(
+        _helios.apply_material_to_geometry_indices(
             self._cpp_object, material._cpp_object, valid_indices
         )
 
@@ -421,10 +420,10 @@ class ScenePart(Model, cpp_class=_helios.ScenePart):
         """Update material(s) for the scene part.
 
         It can be provided in one of the following ways:
-        * 'indices': a list of specific primitive indices to update
+        * 'indices': a list of specific geometry indices to update
         * 'range_start' & 'range_stop': an elevation range to update
 
-        If neither is provided, the material will be applied to all primitives.
+        If neither is provided, the material will be applied to all geometry.
         """
         if indices is not None:
             self._apply_material_to_indices(material, indices)
@@ -433,14 +432,14 @@ class ScenePart(Model, cpp_class=_helios.ScenePart):
             range_stop = (
                 range_stop
                 if range_stop is not None
-                else len(self._cpp_object.primitives)
+                else self._cpp_object.num_geometry_refs
             )
 
-            self._apply_material_to_primitives_in_specific_range(
+            self._apply_material_to_geometry_in_specific_range(
                 material, range_start, range_stop
             )
         else:
-            self._apply_material_to_all_primitives(material)
+            self._apply_material_to_all_geometry(material)
 
 
 class StaticScene(Model, cpp_class=_helios.StaticScene):
@@ -455,7 +454,7 @@ class StaticScene(Model, cpp_class=_helios.StaticScene):
         self, execution_settings: Optional[ExecutionSettings] = None, **parameters
     ):
         """Finalize the scene, making it ready for rendering."""
-        if len(self._cpp_object.primitives) == 0:
+        if not is_finalized(self):
             execution_settings = compose_execution_settings(
                 execution_settings, parameters
             )
@@ -469,7 +468,7 @@ class StaticScene(Model, cpp_class=_helios.StaticScene):
             )
 
     def _set_reflectances(self, wavelength: float):
-        """Modify the scene's primitives with correct reflectances for the given wavelength."""
+        """Modify the scene geometry with reflectances for the given wavelength."""
 
         _helios.set_scene_reflectances(
             self._cpp_object, [str(p) for p in get_asset_directories()], wavelength
@@ -485,6 +484,7 @@ class StaticScene(Model, cpp_class=_helios.StaticScene):
         # When the Scene changes after initialization, we want to invalidate the KDTree etc.
         if not self._during_init:
             _helios.invalidate_static_scene(self._cpp_object)
+            self._is_finalized = False
 
     @classonlymethod
     @validate_call

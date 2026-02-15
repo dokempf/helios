@@ -295,8 +295,8 @@ XmlSceneLoader::validateScenePart(std::shared_ptr<ScenePart> scenePart,
                                   tinyxml2::XMLElement* scenePartNode)
 {
   // If the scene part is not valid ...
-  if (scenePart->getPrimitiveType() == ScenePart::PrimitiveType::NONE &&
-      scenePart->mPrimitives.empty()) {
+  if (scenePart->getGeometryType() == ScenePart::GeometryType::NONE &&
+      scenePart->geometryCount() == 0) {
     // Obtain the path
     std::string path = "#NULL#";
     std::string pathType = "path";
@@ -352,24 +352,25 @@ XmlSceneLoader::digestScenePart(std::shared_ptr<ScenePart>& scenePart,
   if (!dynObject)
     scene->appendStaticObject(scenePart);
 
-  // Add scene part primitives to the scene
-  scene->primitives.insert(scene->primitives.end(),
-                           scenePart->mPrimitives.begin(),
-                           scenePart->mPrimitives.end());
-
   // Split subparts into different scene parts
   if (splitPart) {
+    std::vector<std::shared_ptr<ScenePart>> splitParts;
     size_t partIndexOffset = scenePart->subpartLimit.size() - 1;
-    if (scenePart->splitSubparts())
+    if (scenePart->splitSubparts(&splitParts))
       partIndex += partIndexOffset;
+    if (!dynObject) {
+      for (std::shared_ptr<ScenePart> const& splitScenePart : splitParts) {
+        scene->appendStaticObject(splitScenePart);
+      }
+    }
   }
 
   // Infer type of primitive for the scene part
-  size_t const numVertices = scenePart->mPrimitives[0]->getNumVertices();
+  size_t const numVertices = scenePart->geometryVertexCount(0);
   if (numVertices == 3)
-    scenePart->primitiveType = ScenePart::TRIANGLE;
+    scenePart->geometryType = ScenePart::TRIANGLE;
   else
-    scenePart->primitiveType = ScenePart::VOXEL;
+    scenePart->geometryType = ScenePart::VOXEL;
 }
 
 std::shared_ptr<KDTreeFactory>
@@ -474,10 +475,8 @@ XmlSceneLoader::loadDynMotions(tinyxml2::XMLElement* scenePartNode,
     dmotionNode = dmotionNode->NextSiblingElement("dmotion");
   }
 
-  // Update scene part for each primitive so it is the new DMO
-  for (Primitive* primitive : dsmo->mPrimitives) {
-    primitive->part = dsmo;
-  }
+  // Update scene part ownership so all geometry belongs to the new DMO.
+  dsmo->bindGeometryOwners(dsmo);
 
   // Use scene part ID to build dynamic sequentiable moving object ID
   std::stringstream ss;
@@ -512,12 +511,9 @@ XmlSceneLoader::makeSceneDynamic(std::shared_ptr<StaticScene> scene)
   // It is as simple as rebuilding the static objects because at this point
   // there is no dynamic object in the scene yet, since it didnt support them
   newScene->clearStaticObjects();
-  std::set<std::shared_ptr<ScenePart>> parts; // Scene parts with no repeats
-  std::vector<Primitive*> const primitives = newScene->primitives;
-  for (Primitive* primitive : primitives)
-    if (primitive->part != nullptr)
-      parts.insert(primitive->part);
-  for (std::shared_ptr<ScenePart> part : parts)
+  std::set<std::shared_ptr<ScenePart>> parts(newScene->parts.begin(),
+                                             newScene->parts.end());
+  for (std::shared_ptr<ScenePart> const& part : parts)
     newScene->appendStaticObject(part);
 
   // Return upgraded scene

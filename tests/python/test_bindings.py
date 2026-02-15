@@ -18,6 +18,21 @@ def tup_mul(v, scalar):
     return (v[0] * scalar, v[1] * scalar, v[2] * scalar)
 
 
+def make_triangle_ref():
+    part = _helios.TriangleScenePart(1)
+    v0 = _helios.Vertex(0.0, 0.0, 0.0)
+    v1 = _helios.Vertex(1.0, 0.0, 0.0)
+    v2 = _helios.Vertex(0.0, 1.0, 0.0)
+    part.set_triangle(0, v0, v1, v2)
+    return part, part.geometry_ref(0)
+
+
+def make_detailed_voxel_ref():
+    part = _helios.DetailedVoxelScenePart(1)
+    part.set_detailed_voxel(0, [1.0, 2.0, 3.0], 0.5, [1, 2], [0.1, 0.2, 0.3])
+    return part, part.geometry_ref(0)
+
+
 def test_aabb_instantiation():
     aabb = _helios.AABB()
     assert aabb is not None, "Failed to create AABB instance"
@@ -56,42 +71,30 @@ def test_vertex_default_instantiation():
     assert v.normal == (0.0, 0.0, 0.0)
 
 
-def test_triangle_instantiation():
-    v0 = _helios.Vertex(0.0, 0.0, 0.0)
-    v1 = _helios.Vertex(1.0, 0.0, 0.0)
-    v2 = _helios.Vertex(0.0, 1.0, 0.0)
-    triangle = _helios.Triangle(v0, v1, v2)
-    assert isinstance(triangle, _helios.Triangle), "Failed to create Triangle instance"
+def test_triangle_scene_part_instantiation():
+    part, _ = make_triangle_ref()
+    assert isinstance(part, _helios.TriangleScenePart)
 
 
-def test_primitive_properties():
-    v0 = _helios.Vertex(0.0, 0.0, 0.0)
-    v1 = _helios.Vertex(1.0, 0.0, 0.0)
-    v2 = _helios.Vertex(0.0, 1.0, 0.0)
-    triangle = _helios.Triangle(v0, v1, v2)
-    assert triangle.scene_part is None, "scene_part should be None by default"
-    assert triangle.material is None, "material should be None by default"
+def test_geometry_ref_properties():
+    _, ref = make_triangle_ref()
+    assert ref.scene_part is not None
+    assert ref.material is None
 
 
 def test_triangle_face_normal():
-    v0 = _helios.Vertex(0.0, 0.0, 0.0)
-    v1 = _helios.Vertex(1.0, 0.0, 0.0)
-    v2 = _helios.Vertex(0.0, 1.0, 0.0)
-    triangle = _helios.Triangle(v0, v1, v2)
-    face_normal = triangle.face_normal
+    part, _ = make_triangle_ref()
+    face_normal = part.face_normal(0)
     assert (
         isinstance(face_normal, tuple) and len(face_normal) == 3
     ), "face_normal should be a 3-tuple"
 
 
-def test_primitive_ray_intersection():
-    v0 = _helios.Vertex(0.0, 0.0, 0.0)
-    v1 = _helios.Vertex(1.0, 0.0, 0.0)
-    v2 = _helios.Vertex(0.0, 1.0, 0.0)
-    triangle = _helios.Triangle(v0, v1, v2)
+def test_geometry_ref_ray_intersection():
+    _, ref = make_triangle_ref()
     ray_origin = (0.5, 0.5, 1.0)
     ray_dir = (0.0, 0.0, -1.0)
-    intersections = triangle.ray_intersection(ray_origin, ray_dir)
+    intersections = ref.ray_intersection(ray_origin, ray_dir)
     expected_intersections = (0.5, 0.5, 0.0)
 
     # Verify the results
@@ -112,80 +115,50 @@ def test_primitive_ray_intersection():
         assert (
             intersection == expected_intersections[i]
         ), f"Intersection at index {i} does not match"
-    ray_origin = (0.5, 0.5, 1.0)
-    ray_dir = (0.0, 0.0, -1.0)
-    intersections = triangle.ray_intersection(ray_origin, ray_dir)
     assert len(intersections) > 0, "The intersections list should not be empty"
     assert intersections[0] == -1 or isinstance(
         intersections[0], float
     ), "The intersection should be a float or -1"
 
 
-def test_primitive_ray_intersection_distance():
-    v0 = _helios.Vertex(0.0, 0.0, 0.0)
-    v1 = _helios.Vertex(1.0, 0.0, 0.0)
-    v2 = _helios.Vertex(0.0, 1.0, 0.0)
-    triangle = _helios.Triangle(v0, v1, v2)
+def test_geometry_ref_ray_intersection_distance():
+    _, ref = make_triangle_ref()
     ray_origin = (0.5, 0.5, 1.0)
     ray_dir = (0.0, 0.0, -1.0)
-    distance = triangle.ray_intersection_distance(ray_origin, ray_dir)
+    distance = ref.ray_intersection_distance(ray_origin, ray_dir)
     assert isinstance(
         distance, float
     ), "ray_intersection_distance should return a float"
     assert distance > 0, "The distance should be greater than 0"
 
 
-def test_primitive_incidence_angle():
-    v0 = _helios.Vertex(0.0, 0.0, 0.0)
-    v1 = _helios.Vertex(1.0, 0.0, 0.0)
-    v2 = _helios.Vertex(0.0, 1.0, 0.0)
-    triangle = _helios.Triangle(v0, v1, v2)
+def test_geometry_ref_incidence_angle():
+    _, ref = make_triangle_ref()
     ray_origin = (0.5, 0.5, 1.0)
     ray_dir = (0.0, 0.0, -1.0)
     intersection_point = (0.5, 0.5, 0.0)
-    incidence_angle = triangle.incidence_angle(ray_origin, ray_dir, intersection_point)
-    expected_angle = (
-        0.0  # This value depends on your implementation and expected result
-    )
-
-    # Verify the result
+    incidence_angle = ref.incidence_angle(ray_origin, ray_dir, intersection_point)
+    expected_angle = 0.0
     assert (
         abs(incidence_angle - expected_angle) < 1e-6
     ), f"Incidence angle {incidence_angle} is not close to expected value {expected_angle}"
-    ray_origin = (0.5, 0.5, 1.0)
-    ray_dir = (0.0, 0.0, -1.0)
-    intersection_point = (0.5, 0.5, 0.0)
-    incidence_angle = triangle.incidence_angle(ray_origin, ray_dir, intersection_point)
     assert isinstance(incidence_angle, float), "incidence_angle should return a float"
 
 
-def test_primitive_update():
-    v0 = _helios.Vertex(0.0, 0.0, 0.0)
-    v1 = _helios.Vertex(1.0, 0.0, 0.0)
-    v2 = _helios.Vertex(0.0, 1.0, 0.0)
-    triangle = _helios.Triangle(v0, v1, v2)
-    triangle.update()
-    # No assert needed; just ensure the method call does not raise an exception
-
-
-def test_primitive_num_vertices():
-    v0 = _helios.Vertex(0.0, 0.0, 0.0)
-    v1 = _helios.Vertex(1.0, 0.0, 0.0)
-    v2 = _helios.Vertex(0.0, 1.0, 0.0)
-    triangle = _helios.Triangle(v0, v1, v2)
-    num_vertices = len(triangle.vertices)
+def test_triangle_scene_part_num_vertices():
+    part, _ = make_triangle_ref()
+    num_vertices = len(part.triangle_vertices(0))
     assert num_vertices == 3, "num_vertices should return 3"
 
 
-# GLMDVEC3
-def test_primitive_vertices():
-    v0 = _helios.Vertex(0.0, 0.0, 0.0)
-    v1 = _helios.Vertex(1.0, 0.0, 0.0)
-    v2 = _helios.Vertex(0.0, 1.0, 0.0)
-    triangle = _helios.Triangle(v0, v1, v2)
+def test_triangle_scene_part_vertices():
+    part, ref = make_triangle_ref()
+    vertices = part.triangle_vertices(0)
+    assert len(vertices) == 3
+    assert vertices[0].position == (0.0, 0.0, 0.0)
     ray_origin = (0.5, 0.5, 1.0)
     ray_dir = (0.0, 0.0, -1.0)
-    intersections = triangle.ray_intersection(ray_origin, ray_dir)
+    intersections = ref.ray_intersection(ray_origin, ray_dir)
 
     assert len(intersections) > 0, "The intersections list should not be empty"
     assert intersections[0] == -1 or isinstance(
@@ -194,27 +167,28 @@ def test_primitive_vertices():
 
 
 def test_detailed_voxel_instantiation():
-    double_values = [0.1, 0.2, 0.3]
-    voxel = _helios.DetailedVoxel(
-        [1.0, 2.0, 3.0], 0.5, [1, 2], double_values
-    )  # [0.1, 0.2, 0.3])
-    assert isinstance(voxel, _helios.DetailedVoxel)
-    assert voxel.nb_echos == 1
-    assert voxel.nb_sampling == 2
+    part, ref = make_detailed_voxel_ref()
+    assert isinstance(part, _helios.DetailedVoxelScenePart)
+    assert ref.is_valid() is True
 
 
 def test_detailed_voxel_properties():
-    double_values = [0.1, 0.2, 0.3]
-    voxel = _helios.DetailedVoxel([1.0, 2.0, 3.0], 0.5, [1, 2], double_values)
-    voxel.nb_echos = 3
-    assert voxel.nb_echos == 3
-    voxel.nb_sampling = 4
-    assert voxel.nb_sampling == 4
-    assert voxel.number_of_double_values == 3
-    voxel.max_pad = 0.6
-    assert voxel.max_pad == 0.6
-    voxel.set_double_value(1, 0.5)
-    assert voxel.get_double_value(1) == 0.5
+    part, ref = make_detailed_voxel_ref()
+    assert part.get_int_value(0, 0) == 1
+    assert part.get_int_value(0, 1) == 2
+    part.set_int_value(0, 0, 3)
+    assert part.get_int_value(0, 0) == 3
+    assert part.get_double_value(0, 1) == 0.2
+    part.set_double_value(0, 1, 0.5)
+    assert part.get_double_value(0, 1) == 0.5
+    part.max_pad = 0.6
+    assert part.max_pad == 0.6
+
+    ray_origin = (1.0, 2.0, 5.0)
+    ray_dir = (0.0, 0.0, -1.0)
+    distance = ref.ray_intersection_distance(ray_origin, ray_dir)
+    assert isinstance(distance, float)
+    assert distance > 0
 
 
 def test_trajectory_instantiation():
@@ -317,7 +291,7 @@ def test_ray_scene_intersection_instantiation():
     # Test default constructor
     rsi = _helios.RaySceneIntersection()
     assert isinstance(rsi, _helios.RaySceneIntersection)
-    assert rsi.primitive is None
+    assert rsi.geometry_ref.is_valid() is False
     assert rsi.point == (0.0, 0.0, 0.0)
     assert rsi.incidence_angle == 0.0
 
@@ -795,16 +769,9 @@ def modify_scene_part_in_threads(scene_part, lock):
 
 def test_scene_properties():
     scene = _helios.Scene()
-
-    # Test adding a new triangle
-    triangle = scene.new_triangle()
-    assert triangle is not None
-    assert isinstance(triangle, _helios.Triangle)
-
-    # Test adding a new detailed voxel
-    voxel = scene.new_detailed_voxel()
-    assert voxel is not None
-    assert isinstance(voxel, _helios.DetailedVoxel)
+    assert scene.geometry_refs == []
+    with pytest.raises(IndexError):
+        scene.geometry_ref(0)
 
 
 def test_platform_properties():

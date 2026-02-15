@@ -14,7 +14,7 @@ FastSAHKDTreeGeometricStrategy::clone(SimpleKDTreeFactory* kdtf) const
 double
 FastSAHKDTreeGeometricStrategy::GEOM_findSplitPositionBySAH(
   KDTreeNode* node,
-  std::vector<Primitive*>& primitives,
+  std::vector<GeometryRef>& primitives,
   int assignedThreads) const
 {
   // Handle cases where sequential execution is preferred
@@ -25,7 +25,7 @@ FastSAHKDTreeGeometricStrategy::GEOM_findSplitPositionBySAH(
   return fsahkdtf.findSplitPositionByFastSAHRecipe(
     node,
     primitives,
-    [&](std::vector<Primitive*>& primitives,
+    [&](std::vector<GeometryRef>& primitives,
         int const splitAxis,
         double const minp,
         double const deltap,

@@ -54,7 +54,7 @@ protected:
    */
   std::function<KDTreeNode*(KDTreeNode*,
                             bool const,
-                            std::vector<Primitive*>&,
+                            std::vector<GeometryRef>&,
                             int const,
                             int const)>
     _buildRecursive;
@@ -96,13 +96,8 @@ public:
 
   // ***  SIMPLE KDTREE FACTORY METHODS  *** //
   // *************************************** //
-  /**
-   * @brief Build a simple KDTree from given primitives
-   * @param primitives Primitives to build simple KDTree splitting them
-   * @return Pointer to root node of built simple KDTree
-   */
-  KDTreeNodeRoot* makeFromPrimitivesUnsafe(
-    std::vector<Primitive*>& primitives,
+  KDTreeNodeRoot* makeFromGeometryRefsUnsafe(
+    std::vector<GeometryRef>& geometryRefs,
     bool const computeStats = false,
     bool const reportStats = false) override;
 
@@ -134,7 +129,7 @@ protected:
    */
   virtual KDTreeNode* buildRecursive(KDTreeNode* parent,
                                      bool const left,
-                                     std::vector<Primitive*>& primitives,
+                                     std::vector<GeometryRef>& primitives,
                                      int const depth,
                                      int const index);
   /**
@@ -168,31 +163,31 @@ protected:
   virtual KDTreeNode* buildRecursiveRecipe(
     KDTreeNode* parent,
     bool const left,
-    std::vector<Primitive*>& primitives,
+    std::vector<GeometryRef>& primitives,
     int const depth,
     int const index,
     std::function<void(KDTreeNode* node,
                        KDTreeNode* parent,
                        bool const left,
-                       std::vector<Primitive*> const& primitives)>
+                       std::vector<GeometryRef> const& primitives)>
       f_computeNodeBoundaries,
     std::function<void(KDTreeNode* node,
                        KDTreeNode* parent,
-                       std::vector<Primitive*>& primitives,
+                       std::vector<GeometryRef>& primitives,
                        int const depth)> f_defineSplit,
-    std::function<void(std::vector<Primitive*> const& primitives,
+    std::function<void(std::vector<GeometryRef> const& primitives,
                        int const splitAxis,
                        double const splitPos,
-                       std::vector<Primitive*>& leftPrimitives,
-                       std::vector<Primitive*>& rightPrimitives)>
+                       std::vector<GeometryRef>& leftPrimitives,
+                       std::vector<GeometryRef>& rightPrimitives)>
       f_populateSplits,
     std::function<void(KDTreeNode* node,
                        KDTreeNode* parent,
-                       std::vector<Primitive*> const& primitives,
+                       std::vector<GeometryRef> const& primitives,
                        int const depth,
                        int const index,
-                       std::vector<Primitive*>& leftPrimitives,
-                       std::vector<Primitive*>& rightPrimitives)>
+                       std::vector<GeometryRef>& leftPrimitives,
+                       std::vector<GeometryRef>& rightPrimitives)>
       f_buildChildrenNodes);
   /**
    * @brief Analyze KDTree computing its max depth and the minimum and
@@ -206,7 +201,7 @@ protected:
    */
   virtual void reportKDTreeStats(
     KDTreeNodeRoot* root,
-    std::vector<Primitive*> const& primitives) const;
+    std::vector<GeometryRef> const& primitives) const;
 
   /**
    * @brief Define the split axis and position for current node.
@@ -239,7 +234,7 @@ protected:
    */
   virtual void defineSplit(KDTreeNode* node,
                            KDTreeNode* parent,
-                           std::vector<Primitive*>& primitives,
+                           std::vector<GeometryRef>& primitives,
                            int const depth) const;
   /**
    * @brief Populate list of primitives for left and right splits from
@@ -252,11 +247,11 @@ protected:
    *  stored
    * @see SimpleKDTreeFactory::onPopulateSplitsDigestPrimitive
    */
-  virtual void populateSplits(std::vector<Primitive*> const& primitives,
+  virtual void populateSplits(std::vector<GeometryRef> const& primitives,
                               int const splitAxis,
                               double const splitPos,
-                              std::vector<Primitive*>& leftPrimitives,
-                              std::vector<Primitive*>& rightPrimitives) const;
+                              std::vector<GeometryRef>& leftPrimitives,
+                              std::vector<GeometryRef>& rightPrimitives) const;
   /**
    * @brief Build children nodes for given node. If no children nodes must
    *  be built, then the node is configured as a leaf node
@@ -273,11 +268,11 @@ protected:
    */
   virtual void buildChildrenNodes(KDTreeNode* node,
                                   KDTreeNode* parent,
-                                  std::vector<Primitive*> const& primitives,
+                                  std::vector<GeometryRef> const& primitives,
                                   int const depth,
                                   int const index,
-                                  std::vector<Primitive*>& leftPrimitives,
-                                  std::vector<Primitive*>& rightPrimitives);
+                                  std::vector<GeometryRef>& leftPrimitives,
+                                  std::vector<GeometryRef>& rightPrimitives);
 
   // ***  BUILDING UTILS  *** //
   // ************************ //
@@ -342,7 +337,7 @@ protected:
     KDTreeNode* node,
     KDTreeNode* parent,
     bool const left,
-    std::vector<Primitive*> const& primitives) const;
+    std::vector<GeometryRef> const& primitives) const;
 
   /**
    * @brief Function to assist SimpleKDTreeFactory::populateSplits by
@@ -350,11 +345,11 @@ protected:
    * @see SimpleKDTreeFactory::populateSplits
    */
   virtual void onPopulateSplitsDigestPrimitive(
-    Primitive* p,
+    GeometryRef const& p,
     int const splitAxis,
     double const splitPos,
-    std::vector<Primitive*>& leftPrimitives,
-    std::vector<Primitive*>& rightPrimitives) const;
+    std::vector<GeometryRef>& leftPrimitives,
+    std::vector<GeometryRef>& rightPrimitives) const;
 
   /**
    * @brief Function to assist SimpleKDTreeFactory::computeNodeBoundaries
@@ -369,17 +364,17 @@ protected:
     KDTreeNode* node,
     KDTreeNode* parent,
     bool const left,
-    std::vector<Primitive*> const& primitives) const;
+    std::vector<GeometryRef> const& primitives) const;
 
   /**
    * @brief Function to assist SimpleKDTreeFactory::computeNodeBoundaries by
-   *  providing the logic of digesting a primitive
-   * @param p Primitive to be digested
+   *  providing the logic of digesting a geometry reference.
+   * @param p Geometry reference to be digested.
    * @see SimpleKDTreeFactory::computeNodeBoundaries
    * @see SimpleKDTreeFactory::computeMinMaxSAHForChild
    * @see SimpleKDTreeFactory::onComputeNodeBoundariesCalcSAH
    */
-  virtual void onRootBoundariesDigestPrimitive(Primitive* primitive,
+  virtual void onRootBoundariesDigestPrimitive(GeometryRef const& primitive,
                                                double& ax,
                                                double& ay,
                                                double& az,
@@ -417,9 +412,9 @@ protected:
    * @see SimpleKDTreeFactory::minSplitPrimitives
    */
   virtual bool checkNodeMustSplit(
-    std::vector<Primitive*> const& primitives,
-    std::vector<Primitive*> const& leftPrimitives,
-    std::vector<Primitive*> const& rightPrimitives) const;
+    std::vector<GeometryRef> const& primitives,
+    std::vector<GeometryRef> const& leftPrimitives,
+    std::vector<GeometryRef> const& rightPrimitives) const;
 
   /**
    * @brief Make given node a leaf one
@@ -427,5 +422,5 @@ protected:
    * @param primitives Primitives for the leaf node
    */
   virtual void makeLeaf(KDTreeNode* node,
-                        std::vector<Primitive*> const& primitives) const;
+                        std::vector<GeometryRef> const& primitives) const;
 };

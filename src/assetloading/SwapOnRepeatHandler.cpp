@@ -1,8 +1,10 @@
 #include <AbstractGeometryFilter.h>
+#include <DetailedVoxelScenePart.h>
 #include <ScenePart.h>
 #include <SwapOnRepeatHandler.h>
+#include <TriangleScenePart.h>
+#include <VoxelScenePart.h>
 #include <XYZPointCloudFileLoader.h>
-#include <scene/primitives/Primitive.h>
 
 // ***  CONSTRUCTION / DESTRUCTION  *** //
 // ************************************ //
@@ -38,9 +40,12 @@ SwapOnRepeatHandler::prepare(ScenePart* sp)
     ttls.pop_front();
   }
   numCurrentSwaps = 0;
-  this->baseline = std::make_unique<ScenePart>(*sp);
-  for (Primitive* p : this->baseline->mPrimitives)
-    p->part = nullptr;
+  if (sp == nullptr) {
+    baseline = nullptr;
+    return;
+  }
+  baseline = sp->clone(false);
+  baseline->unbindGeometryOwners();
 }
 
 // ***  GETTERs and SETTERs  *** //
@@ -58,10 +63,38 @@ SwapOnRepeatHandler::pushTimeToLive(int const timeToLive)
   this->timesToLive.push_back(timeToLive);
 }
 
-std::vector<Primitive*>&
-SwapOnRepeatHandler::getBaselinePrimitives()
+std::size_t
+SwapOnRepeatHandler::baselineGeometryCount() const
 {
-  return baseline->mPrimitives;
+  return baseline == nullptr ? 0 : baseline->geometryCount();
+}
+
+void
+SwapOnRepeatHandler::setBaselineGeometryMaterial(
+  std::size_t index,
+  std::shared_ptr<Material> material)
+{
+  if (baseline == nullptr || index >= baseline->geometryCount()) {
+    return;
+  }
+  baseline->setGeometryMaterial(index, material);
+}
+
+void
+SwapOnRepeatHandler::releaseBaselineGeometries()
+{
+  if (baseline == nullptr) {
+    return;
+  }
+  baseline->deleteGeometries();
+}
+
+void
+SwapOnRepeatHandler::clearBaselineGeometryStorage()
+{
+  if (baseline != nullptr) {
+    baseline->clearGeometryStorage();
+  }
 }
 
 // ***  UTIL METHODS  *** //
@@ -91,8 +124,7 @@ SwapOnRepeatHandler::doSwap(ScenePart& sp)
         holistic = true;
       }
       // Free primitives memory from scene part
-      for (Primitive* p : sp.mPrimitives)
-        delete p;
+      sp.deleteGeometries();
       // The geometric swap itself
       doGeometricSwap(*genSP, sp);
       // Delete generated geometry (it will no longer be used)
@@ -101,23 +133,11 @@ SwapOnRepeatHandler::doSwap(ScenePart& sp)
     // Otherwise
     else {
       // Reload the baseline geometry on the first iteration only
-      if (firstIter) {
-        // Backup primitives to prevent that baseline is updated
-        std::vector<Primitive*> primitivesBackup = baseline->mPrimitives;
-        for (size_t i = 0; i < primitivesBackup.size(); ++i) {
-          Primitive* newPrimitive = primitivesBackup[i]->clone();
-          newPrimitive->part = nullptr;
-          baseline->mPrimitives[i] = newPrimitive;
-        }
-        // Free primitives memory from scene part
-        for (Primitive* p : sp.mPrimitives)
-          delete p;
-        // The geometric swap itself
-        doGeometricSwap(*baseline, sp);
-        // Restore baseline to prevent any update to propagate further
-        baseline->mPrimitives = primitivesBackup;
+      if (firstIter && baseline != nullptr) {
+        sp.deleteGeometries();
+        std::shared_ptr<ScenePart> baselineClone = baseline->clone(false);
+        doGeometricSwap(*baselineClone, sp);
       }
-      // Remove pointer to primitives to prevent delete current ones
     }
     // Delete filter
     filter->primsOut = nullptr;
@@ -133,15 +153,25 @@ SwapOnRepeatHandler::doSwap(ScenePart& sp)
 void
 SwapOnRepeatHandler::doGeometricSwap(ScenePart& src, ScenePart& dst)
 {
-  // Assign to dst from src
-  dst.primitiveType = src.primitiveType;
-  dst.mPrimitives = src.mPrimitives;
-  dst.centroid = src.centroid;
-  dst.bound = src.bound;
-  dst.onRayIntersectionMode = src.onRayIntersectionMode;
-  dst.onRayIntersectionArgument = src.onRayIntersectionArgument;
-  dst.randomShift = src.randomShift;
-  dst.ladlut = src.ladlut;
-  dst.mCrs = src.mCrs;
-  dst.mEnv = src.mEnv;
+  if (auto* dstDetailed = dynamic_cast<DetailedVoxelScenePart*>(&dst)) {
+    if (auto* srcDetailed = dynamic_cast<DetailedVoxelScenePart*>(&src)) {
+      *dstDetailed = *srcDetailed;
+      return;
+    }
+  }
+  if (auto* dstVoxel = dynamic_cast<VoxelScenePart*>(&dst)) {
+    if (auto* srcVoxel = dynamic_cast<VoxelScenePart*>(&src)) {
+      *dstVoxel = *srcVoxel;
+      return;
+    }
+  }
+  if (auto* dstTriangle = dynamic_cast<TriangleScenePart*>(&dst)) {
+    if (auto* srcTriangle = dynamic_cast<TriangleScenePart*>(&src)) {
+      *dstTriangle = *srcTriangle;
+      return;
+    }
+  }
+
+  // Legacy fallback for non-bulk scene parts.
+  dst = src;
 }

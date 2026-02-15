@@ -11,7 +11,6 @@ if(HELIOS_PCL)
     "DemoSelector.cpp"
     "DynamicSceneDemo.cpp"
     "RaycastingDemo.cpp"
-    "SimplePrimitivesDemo.cpp"
     "SurveyDemo.cpp"
   )
 endif()

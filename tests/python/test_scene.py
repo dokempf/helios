@@ -86,9 +86,9 @@ def test_finalize_scene():
     part = ScenePart.from_xml("data/scenes/toyblocks/toyblocks_scene.xml", id="0")
 
     scene = StaticScene(scene_parts=[part])
-    assert len(scene._cpp_object.primitives) == 0
+    assert len(scene._cpp_object.geometry_refs) == 0
     scene._finalize()
-    assert len(scene._cpp_object.primitives) > 0
+    assert len(scene._cpp_object.geometry_refs) > 0
 
 
 def test_scene_invalidation():
@@ -98,9 +98,9 @@ def test_scene_invalidation():
     scene._finalize()
 
     scene.scene_parts = [part, part2]
-    assert len(scene._cpp_object.primitives) == 0
+    assert len(scene._cpp_object.geometry_refs) == 0
     scene._finalize()
-    assert len(scene._cpp_object.primitives) > 0
+    assert len(scene._cpp_object.geometry_refs) > 0
 
 
 def test_scenepart_from_obj():
@@ -129,7 +129,7 @@ def test_scenepart_from_obj_wrong_axis_argument():
 
 def test_scenepart_from_tiff():
     scene_part = ScenePart.from_tiff("data/test/dem_hd_sub.tif")
-    assert len(scene_part._cpp_object.primitives) > 0
+    assert len(scene_part._cpp_object.geometry_refs) > 0
 
 
 def test_scenepart_from_tiffs():
@@ -166,10 +166,10 @@ def test_scenepart_from_xyz(xyz_file, xyz_file_comma):
         sparse=False,
     )
 
-    assert len(scene_part1._cpp_object.primitives) > 0
-    assert len(scene_part2._cpp_object.primitives) > 0
-    assert len(scene_part3._cpp_object.primitives) > 0
-    assert len(scene_part4._cpp_object.primitives) > 0
+    assert len(scene_part1._cpp_object.geometry_refs) > 0
+    assert len(scene_part2._cpp_object.geometry_refs) > 0
+    assert len(scene_part3._cpp_object.geometry_refs) > 0
+    assert len(scene_part4._cpp_object.geometry_refs) > 0
 
 
 def test_scenepart_from_xyzs(xyz_parts_dir):
@@ -214,10 +214,10 @@ def test_scenepart_from_vox():
         intersection_mode="scaled",
     )
 
-    assert len(scene_parts1._cpp_object.primitives) > 0
-    assert len(scene_parts2._cpp_object.primitives) > 0
-    assert len(scene_parts3._cpp_object.primitives) > 0
-    assert len(scene_parts4._cpp_object.primitives) > 0
+    assert len(scene_parts1._cpp_object.geometry_refs) > 0
+    assert len(scene_parts2._cpp_object.geometry_refs) > 0
+    assert len(scene_parts3._cpp_object.geometry_refs) > 0
+    assert len(scene_parts4._cpp_object.geometry_refs) > 0
 
     with pytest.raises(ValueError):
         ScenePart.from_vox(
@@ -682,36 +682,36 @@ def test_read_incorrect_material_name():
         )
 
 
-def test_apply_material_to_all_primitives():
+def test_apply_material_to_all_geometry():
     scene_part = ScenePart.from_obj("data/sceneparts/toyblocks/cylinder.obj")
-    assert scene_part._cpp_object.primitives[4].material.name == "Material.007"
+    assert scene_part._cpp_object.geometry_refs[4].material.name == "Material.007"
     mat1 = Material.from_file("data/sceneparts/toyblocks/sphere.mtl", "Material.008")
     scene_part.update_material(mat1)
 
-    assert scene_part._cpp_object.primitives[4].material.name == "Material.008"
+    assert scene_part._cpp_object.geometry_refs[4].material.name == "Material.008"
     mat2 = Material.from_file("data/sceneparts/toyblocks/cylinder.mtl", "Material.007")
     scene_part.materials["Material.008"] = mat2
-    assert scene_part._cpp_object.primitives[4].material.name == "Material.007"
+    assert scene_part._cpp_object.geometry_refs[4].material.name == "Material.007"
 
 
-def test_apply_material_to_primitives_in_specific_range():
+def test_apply_material_to_geometry_in_specific_range():
     scene_part = ScenePart.from_obj("data/sceneparts/toyblocks/cylinder.obj")
-    assert scene_part._cpp_object.primitives[17].material.reflectance == 0.5
+    assert scene_part._cpp_object.geometry_refs[17].material.reflectance == 0.5
     mat1 = Material.from_file("data/sceneparts/toyblocks/sphere.mtl", "Material.008")
 
     scene_part.update_material(mat1, range_start=10, range_stop=20)
-    assert scene_part._cpp_object.primitives[17].material.reflectance == 0.2
+    assert scene_part._cpp_object.geometry_refs[17].material.reflectance == 0.2
 
     mat2 = Material.from_file("data/sceneparts/toyblocks/cube_rot.mtl", "Material.002")
 
     scene_part.update_material(mat2, range_stop=5)
-    assert scene_part._cpp_object.primitives[3].material.name == "Material.002"
+    assert scene_part._cpp_object.geometry_refs[3].material.name == "Material.002"
 
     scene_part.update_material(mat2, range_start=25)
-    assert scene_part._cpp_object.primitives[27].material.name == "Material.002"
+    assert scene_part._cpp_object.geometry_refs[27].material.name == "Material.002"
 
 
-def test_apply_material_to_primitives_incorrect_range():
+def test_apply_material_to_geometry_incorrect_range():
     scene_part = ScenePart.from_obj("data/sceneparts/toyblocks/cylinder.obj")
     mat1 = Material.from_file("data/sceneparts/toyblocks/sphere.mtl", "Material.008")
 
@@ -724,11 +724,11 @@ def test_apply_material_to_primitives_incorrect_range():
 
 def test_apply_material_to_indices():
     scene_part = ScenePart.from_obj("data/sceneparts/toyblocks/cylinder.obj")
-    assert scene_part._cpp_object.primitives[3].material.spectra == "shingle_red"
+    assert scene_part._cpp_object.geometry_refs[3].material.spectra == "shingle_red"
     mat1 = Material.from_file("data/sceneparts/toyblocks/sphere.mtl", "Material.008")
 
     scene_part.update_material(mat1, indices=[1, 3, 5])
-    assert scene_part._cpp_object.primitives[3].material.spectra == "conifer"
+    assert scene_part._cpp_object.geometry_refs[3].material.spectra == "conifer"
 
 
 def test_apply_material_to_incorrect_indices():
@@ -739,18 +739,18 @@ def test_apply_material_to_incorrect_indices():
         scene_part.update_material(mat1, indices=[-1, 3000000])
 
 
-def test_update_material_attribute_for_specific_primitives(xyz_file):
+def test_update_material_attribute_for_specific_geometry(xyz_file):
     scene_part_obj = ScenePart.from_obj("data/sceneparts/toyblocks/cylinder.obj")
 
     scene_part_obj.materials["Material.007"].classification = 7
-    assert scene_part_obj._cpp_object.primitives[5].material.classification == 7
+    assert scene_part_obj._cpp_object.geometry_refs[5].material.classification == 7
 
     scene_part_xyz = ScenePart.from_xyz(
         str(xyz_file),
         voxel_size=1.0,
     )
     scene_part_xyz.materials["default"].reflectance = 0.658
-    assert scene_part_xyz._cpp_object.primitives[0].material.reflectance == 0.658
+    assert scene_part_xyz._cpp_object.geometry_refs[0].material.reflectance == 0.658
 
     scene_part_vox = ScenePart.from_vox(
         "data/test/semitransparent_voxels.vox",
@@ -760,24 +760,28 @@ def test_update_material_attribute_for_specific_primitives(xyz_file):
     scene_part_vox.materials["default"].specular_components = [0.1437, 0.2, 0.3434, 0.4]
     assert (
         round(
-            scene_part_vox._cpp_object.primitives[0].material.specular_components[0], 4
+            scene_part_vox._cpp_object.geometry_refs[0].material.specular_components[0],
+            4,
         )
         == 0.1437
     )
     assert (
         round(
-            scene_part_vox._cpp_object.primitives[0].material.specular_components[2], 4
+            scene_part_vox._cpp_object.geometry_refs[0].material.specular_components[2],
+            4,
         )
         == 0.3434
     )
 
     scene_part_tif = ScenePart.from_tiff("data/test/dem_hd_sub.tif")
     scene_part_tif.materials["default"].specular_exponent = 25.0
-    assert scene_part_tif._cpp_object.primitives[0].material.specular_exponent == 25.0
+    assert (
+        scene_part_tif._cpp_object.geometry_refs[0].material.specular_exponent == 25.0
+    )
 
     mat1 = Material.from_file("data/sceneparts/toyblocks/sphere.mtl", "Material.008")
     scene_part_xyz.materials["default"] = mat1
-    assert scene_part_xyz._cpp_object.primitives[0].material.reflectance == 0.2
+    assert scene_part_xyz._cpp_object.geometry_refs[0].material.reflectance == 0.2
 
 
 def test_update_material_attribute_incorrect_name():
@@ -896,7 +900,7 @@ def test_material_dict_cache_mutation_propagates():
     mat = scene_part.materials["Material.007"]
     mat.reflectance = 0.123
 
-    assert scene_part._cpp_object.primitives[5].material.reflectance == 0.123
+    assert scene_part._cpp_object.geometry_refs[5].material.reflectance == 0.123
 
     mats2 = scene_part.materials._snapshot()
     assert mats2["Material.007"].reflectance == 0.123

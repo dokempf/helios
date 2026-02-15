@@ -1,5 +1,4 @@
 #include <scene/dynamic/DynObject.h>
-#include <scene/primitives/Primitive.h>
 
 // ***  DYNAMIC BEHAVIOR  *** //
 // ************************** //
@@ -17,127 +16,132 @@ size_t
 DynObject::countVertices() const
 {
   size_t m = 0;
-  Primitive* primitive;
-  for (size_t i = 0; i < mPrimitives.size(); ++i) {
-    primitive = mPrimitives[i];
-    m += primitive->getNumVertices();
+  for (size_t i = 0; i < geometryCount(); ++i) {
+    m += geometryDynamicVertexCount(i);
   }
   return m;
 }
 
 arma::mat
-DynObject::matrixFromPrimitives(
-  std::function<arma::colvec(Vertex const*)> get) const
+DynObject::matrixFromGeometry(
+  std::function<arma::colvec(std::size_t, std::size_t)> get) const
 {
-  return matrixFromPrimitives(countVertices(), get);
+  return matrixFromGeometry(countVertices(), get);
 }
 arma::mat
-DynObject::matrixFromPrimitives(
+DynObject::matrixFromGeometry(
   size_t const m,
-  std::function<arma::colvec(Vertex const*)> get) const
+  std::function<arma::colvec(std::size_t, std::size_t)> get) const
 {
   arma::mat X(3, m);
   size_t i = 0;
-  for (size_t j = 0; j < mPrimitives.size(); ++j) {
-    Primitive* primitive = mPrimitives[j];
-    Vertex const* vertices = primitive->getVertices();
-    for (size_t k = 0; k < primitive->getNumVertices(); ++k, ++i) {
-      X.col(i) = get(vertices + k);
+  for (size_t j = 0; j < geometryCount(); ++j) {
+    std::size_t const n = geometryDynamicVertexCount(j);
+    for (size_t k = 0; k < n; ++k, ++i) {
+      X.col(i) = get(j, k);
     }
   }
   return X;
 }
 
 void
-DynObject::matrixToPrimitives(
-  std::function<void(Vertex*, arma::colvec const&)> set,
+DynObject::matrixToGeometry(
+  std::function<void(std::size_t, std::size_t, arma::colvec const&)> set,
   arma::mat const& X)
 {
-  matrixToPrimitives(countVertices(), set, X);
+  matrixToGeometry(countVertices(), set, X);
 }
 void
-DynObject::matrixToPrimitives(
+DynObject::matrixToGeometry(
   size_t const m,
-  std::function<void(Vertex*, arma::colvec const&)> set,
+  std::function<void(std::size_t, std::size_t, arma::colvec const&)> set,
   arma::mat const& X)
 {
   size_t i = 0;
-  for (size_t j = 0; j < mPrimitives.size(); ++j) {
-    Primitive* primitive = mPrimitives[j];
-    Vertex* vertices = primitive->getVertices();
-    for (size_t k = 0; k < primitive->getNumVertices(); ++k, ++i) {
-      set(vertices + k, X.col(i));
+  for (size_t j = 0; j < geometryCount(); ++j) {
+    std::size_t const n = geometryDynamicVertexCount(j);
+    for (size_t k = 0; k < n; ++k, ++i) {
+      set(j, k, X.col(i));
     }
   }
 }
 
 arma::mat
-DynObject::positionMatrixFromPrimitives() const
+DynObject::positionMatrixFromGeometry() const
 {
-  return positionMatrixFromPrimitives(countVertices());
+  return positionMatrixFromGeometry(countVertices());
 }
 arma::mat
-DynObject::positionMatrixFromPrimitives(size_t const m) const
+DynObject::positionMatrixFromGeometry(size_t const m) const
 {
-  return matrixFromPrimitives(m, [](Vertex const* p) -> arma::colvec {
-    arma::colvec x(3);
-    x(0) = p->getX();
-    x(1) = p->getY();
-    x(2) = p->getZ();
-    return x;
-  });
-}
-
-arma::mat
-DynObject::normalMatrixFromPrimitives() const
-{
-  return normalMatrixFromPrimitives(countVertices());
-}
-arma::mat
-DynObject::normalMatrixFromPrimitives(size_t const m) const
-{
-  return matrixFromPrimitives(m, [](Vertex const* p) -> arma::colvec {
-    arma::colvec x(3);
-    x(0) = p->normal.x;
-    x(1) = p->normal.y;
-    x(2) = p->normal.z;
-    return x;
-  });
-}
-
-void
-DynObject::updatePrimitivesPositionFromMatrix(arma::mat const& X)
-{
-  updatePrimitivesPositionFromMatrix(countVertices(), X);
-}
-void
-DynObject::updatePrimitivesPositionFromMatrix(size_t const m,
-                                              arma::mat const& X)
-{
-  matrixToPrimitives(
+  return matrixFromGeometry(
     m,
-    [](Vertex* p, arma::colvec const& x) -> void {
-      p->pos.x = x(0);
-      p->pos.y = x(1);
-      p->pos.z = x(2);
+    [this](std::size_t geometryIndex, std::size_t vertexIndex) -> arma::colvec {
+      glm::dvec3 const p =
+        geometryDynamicVertexPosition(geometryIndex, vertexIndex);
+      arma::colvec x(3);
+      x(0) = p.x;
+      x(1) = p.y;
+      x(2) = p.z;
+      return x;
+    });
+}
+
+arma::mat
+DynObject::normalMatrixFromGeometry() const
+{
+  return normalMatrixFromGeometry(countVertices());
+}
+arma::mat
+DynObject::normalMatrixFromGeometry(size_t const m) const
+{
+  return matrixFromGeometry(
+    m,
+    [this](std::size_t geometryIndex, std::size_t vertexIndex) -> arma::colvec {
+      glm::dvec3 const n =
+        geometryDynamicVertexNormal(geometryIndex, vertexIndex);
+      arma::colvec x(3);
+      x(0) = n.x;
+      x(1) = n.y;
+      x(2) = n.z;
+      return x;
+    });
+}
+
+void
+DynObject::updateGeometryPositionFromMatrix(arma::mat const& X)
+{
+  updateGeometryPositionFromMatrix(countVertices(), X);
+}
+void
+DynObject::updateGeometryPositionFromMatrix(size_t const m, arma::mat const& X)
+{
+  matrixToGeometry(
+    m,
+    [this](std::size_t geometryIndex,
+           std::size_t vertexIndex,
+           arma::colvec const& x) -> void {
+      setGeometryDynamicVertexPosition(
+        geometryIndex, vertexIndex, glm::dvec3(x(0), x(1), x(2)));
     },
     X);
 }
 
 void
-DynObject::updatePrimitivesNormalFromMatrix(arma::mat const& X)
+DynObject::updateGeometryNormalFromMatrix(arma::mat const& X)
 {
-  updatePrimitivesNormalFromMatrix(countVertices(), X);
+  updateGeometryNormalFromMatrix(countVertices(), X);
 }
 void
-DynObject::updatePrimitivesNormalFromMatrix(size_t const m, arma::mat const& X)
+DynObject::updateGeometryNormalFromMatrix(size_t const m, arma::mat const& X)
 {
-  matrixToPrimitives(
+  matrixToGeometry(
     m,
-    [](Vertex* p, arma::colvec const& x) -> void {
-      p->normal.x = x(0);
-      p->normal.y = x(1);
-      p->normal.z = x(2);
+    [this](std::size_t geometryIndex,
+           std::size_t vertexIndex,
+           arma::colvec const& x) -> void {
+      setGeometryDynamicVertexNormal(
+        geometryIndex, vertexIndex, glm::dvec3(x(0), x(1), x(2)));
     },
     X);
 }

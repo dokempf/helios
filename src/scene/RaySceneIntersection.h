@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Primitive.h>
+#include <GeometryRef.h>
 #include <PrintUtils.h>
 
 #include <ostream>
@@ -16,9 +16,9 @@ public:
   // ***  ATTRIBUTES  *** //
   // ******************** //
   /**
-   * @brief Primitive intersected by the ray
+   * @brief Stable owner/index reference to intersected geometry.
    */
-  Primitive* prim;
+  GeometryRef geometryRef;
   /**
    * @brief Intersection point
    */
@@ -36,7 +36,8 @@ public:
   // *************************** //
   friend std::ostream& operator<<(std::ostream& out, RaySceneIntersection& itst)
   {
-    out << itst.prim << "," << itst.point << "," << itst.incidenceAngle;
+    out << itst.geometryRef.index << "," << itst.point << ","
+        << itst.incidenceAngle;
     return out;
   }
 };

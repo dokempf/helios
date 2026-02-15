@@ -1,18 +1,23 @@
 #pragma once
 
 #include <assetloading/SwapOnRepeatHandler.h>
-class Primitive;
 class AABB;
 class WavefrontObj;
+class Material;
+class IntersectionHandlingResult;
+template<typename T>
+class NoiseSource;
 
 #include <LadLut.h>
 #include <Vertex.h>
 #include <maths/Rotation.h>
 
 #include <armadillo>
+#include <boost/serialization/version.hpp>
 #include <iostream>
 #include <memory>
 #include <ogr_geometry.h>
+#include <stdexcept>
 #include <vector>
 
 /**
@@ -32,7 +37,11 @@ class ScenePart
   template<class Archive>
   void serialize(Archive& ar, const unsigned int version)
   {
-    ar & mPrimitives;
+    if (version < 2) {
+      throw std::runtime_error(
+        "Unsupported ScenePart serialization version. "
+        "This build requires ScenePart archive version >= 2.");
+    }
     ar & centroid;
     ar & bound;
     ar & mId;
@@ -63,25 +72,27 @@ public:
   /**
    * @brief Specify the type of primitive used to build the scene part
    * By default, the ScenePart is not build from primitives (None)
-   * @see ScenePart::primitiveType
+   * @see ScenePart::geometryType
    */
-  enum PrimitiveType
+  enum GeometryType
   {
     NONE,
     TRIANGLE,
-    VOXEL
+    VOXEL,
+    DETAILED_VOXEL
   };
   // ***  ATTRIBUTES  *** //
   // ******************** //
   /**
    * @brief The type of primitive used to build the scene part
-   * @see ScenePart::PrimitiveType
+   * @see ScenePart::GeometryType
    */
-  PrimitiveType primitiveType;
+  GeometryType geometryType;
   /**
-   * @brief Vector of pointers to primitives used by this scene part
+   * @brief Transient storage used to expose vertex pointer views for APIs that
+   * still expect `std::vector<Vertex*>`.
    */
-  std::vector<Primitive*> mPrimitives;
+  mutable std::vector<Vertex> mVertexScratch;
   /**
    * @brief The centroid of the scene part
    */
@@ -179,7 +190,7 @@ public:
   // ************************************ //
   /**
    * @brief Default constructor for a scene part
-   * @param shallowPrimitives If true, primitives pointers will be the same
+   * @param shallowGeometry If true, primitives pointers will be the same
    *  for the copy and for the source. If false, then primitives for the
    *  copy will be cloned so they are at different memory regions. Notice
    *  that a shallow copy of the primitives implies that the primitives in
@@ -187,11 +198,15 @@ public:
    *  mode (true) with caution.
    */
   ScenePart()
-    : primitiveType(PrimitiveType::NONE)
+    : geometryType(GeometryType::NONE)
   {
   }
-  ScenePart(ScenePart const& sp, bool const shallowPrimitives = false);
+  ScenePart(ScenePart const& sp, bool const shallowGeometry = false);
   virtual ~ScenePart() {}
+  /**
+   * @brief Polymorphic clone for scene parts.
+   */
+  virtual std::shared_ptr<ScenePart> clone(bool shallowGeometry = false) const;
 
   // ***  COPY / MOVE OPERATORS  *** //
   // ******************************* //
@@ -222,10 +237,13 @@ public:
   /**
    * @brief Split each subpart into a different scene part, with the first
    *  one corresponding to this scene part
+   * @param splitParts Optional output vector receiving generated scene parts
+   *  created from subparts (excluding this instance).
    * @see subpartLimit
    * @return True when split was successfully performed, false otherwise
    */
-  bool splitSubparts();
+  bool splitSubparts(
+    std::vector<std::shared_ptr<ScenePart>>* splitParts = nullptr);
 
   /**
    * @brief Compute the default centroid for the scene part as the midrange
@@ -287,26 +305,163 @@ public:
    */
   virtual void release();
 
+  // ***  INDEX-BASED GEOMETRY API  *** //
+  // ********************************** //
+  /**
+   * @brief Number of geometry elements owned by this scene part.
+   */
+  virtual std::size_t geometryCount() const;
+  /**
+   * @brief Type of geometry elements owned by this scene part.
+   */
+  virtual GeometryType geometryTypeOf() const;
+  /**
+   * @brief Compute and optionally cache the bounding box of the scene part.
+   */
+  virtual std::shared_ptr<AABB> computeBound();
+  /**
+   * @brief Geometry element centroid by index.
+   */
+  virtual glm::dvec3 geometryCentroid(std::size_t index) const;
+  /**
+   * @brief Geometry element ray intersection distance by index.
+   */
+  virtual double geometryRayIntersectionDistance(
+    std::size_t index,
+    glm::dvec3 const& rayOrigin,
+    glm::dvec3 const& rayDir) const;
+  /**
+   * @brief Geometry element ray intersection interval(s) by index.
+   */
+  virtual std::vector<double> geometryRayIntersection(
+    std::size_t index,
+    glm::dvec3 const& rayOrigin,
+    glm::dvec3 const& rayDir) const;
+  /**
+   * @brief Geometry element incidence angle by index.
+   */
+  virtual double geometryIncidenceAngle(
+    std::size_t index,
+    glm::dvec3 const& rayOrigin,
+    glm::dvec3 const& rayDir,
+    glm::dvec3 const& intersectionPoint) const;
+  /**
+   * @brief Geometry element vertex count by index.
+   */
+  virtual std::size_t geometryVertexCount(std::size_t index) const;
+  /**
+   * @brief Number of dynamic vertices used by motion updates.
+   */
+  virtual std::size_t geometryDynamicVertexCount(std::size_t index) const;
+  /**
+   * @brief Dynamic vertex position by geometry/vertex indices.
+   */
+  virtual glm::dvec3 geometryDynamicVertexPosition(
+    std::size_t geometryIndex,
+    std::size_t vertexIndex) const;
+  /**
+   * @brief Dynamic vertex normal by geometry/vertex indices.
+   */
+  virtual glm::dvec3 geometryDynamicVertexNormal(std::size_t geometryIndex,
+                                                 std::size_t vertexIndex) const;
+  /**
+   * @brief Set dynamic vertex position by geometry/vertex indices.
+   */
+  virtual void setGeometryDynamicVertexPosition(std::size_t geometryIndex,
+                                                std::size_t vertexIndex,
+                                                glm::dvec3 const& position);
+  /**
+   * @brief Set dynamic vertex normal by geometry/vertex indices.
+   */
+  virtual void setGeometryDynamicVertexNormal(std::size_t geometryIndex,
+                                              std::size_t vertexIndex,
+                                              glm::dvec3 const& normal);
+  /**
+   * @brief Geometry element ground z offset by index.
+   */
+  virtual double geometryGroundZOffset(std::size_t index) const;
+  /**
+   * @brief Whether geometry can compute sigma via LAD LUT by index.
+   */
+  virtual bool geometryCanComputeSigmaWithLadLut(std::size_t index) const;
+  /**
+   * @brief Compute sigma via LAD LUT by index.
+   */
+  virtual double geometryComputeSigmaWithLadLut(
+    std::size_t index,
+    glm::dvec3 const& direction) const;
+  /**
+   * @brief Whether geometry can handle intersections by index.
+   */
+  virtual bool geometryCanHandleIntersections(std::size_t index) const;
+  /**
+   * @brief Geometry element AABB by index.
+   */
+  virtual std::shared_ptr<AABB> geometryAABB(std::size_t index) const;
+  /**
+   * @brief Handle geometry-ray intersection by index.
+   */
+  virtual IntersectionHandlingResult geometryOnRayIntersection(
+    std::size_t index,
+    NoiseSource<double>& uniformNoiseSource,
+    glm::dvec3& rayDirection,
+    glm::dvec3 const& insideIntersectionPoint,
+    glm::dvec3 const& outsideIntersectionPoint,
+    double rayIntensity) const;
+  /**
+   * @brief Geometry element material accessor by index.
+   */
+  virtual std::shared_ptr<Material> geometryMaterial(std::size_t index) const;
+  /**
+   * @brief Geometry element material mutator by index.
+   */
+  virtual void setGeometryMaterial(std::size_t index,
+                                   std::shared_ptr<Material> material);
+  /**
+   * @brief Rebind primitive owner pointers to the given scene part.
+   */
+  virtual void bindGeometryOwners(std::shared_ptr<ScenePart> const& owner);
+  /**
+   * @brief Rebind owner pointers only for primitives with no owner.
+   */
+  virtual void bindUnownedGeometryOwners(
+    std::shared_ptr<ScenePart> const& owner);
+  /**
+   * @brief Rotate primitive by index.
+   */
+  virtual void geometryRotate(std::size_t index, Rotation& rotation);
+  /**
+   * @brief Scale primitive by index.
+   */
+  virtual void geometryScale(std::size_t index, double factor);
+  /**
+   * @brief Translate primitive by index.
+   */
+  virtual void geometryTranslate(std::size_t index, glm::dvec3 const& shift);
+  /**
+   * @brief Update primitive by index.
+   */
+  virtual void geometryUpdate(std::size_t index);
+  /**
+   * @brief Trigger post-load primitive hook by index.
+   */
+  virtual void geometryOnFinishLoading(std::size_t index,
+                                       NoiseSource<double>& uniformNoiseSource);
+  /**
+   * @brief Delete all owned primitive objects and clear storage.
+   */
+  virtual void deleteGeometries();
+  /**
+   * @brief Clear primitive storage without deleting pointed objects.
+   */
+  virtual void clearGeometryStorage();
+  /**
+   * @brief Clear owner pointers for all primitives.
+   */
+  virtual void unbindGeometryOwners();
+
   // ***  GETTERS and SETTERS  *** //
   // ***************************** //
-  /**
-   * @brief Obtain the primitives of the scene part
-   * @return Scene part primitives
-   * @see ScenePart::mPrimitives
-   */
-  inline std::vector<Primitive*> const& getPrimitives() const
-  {
-    return mPrimitives;
-  }
-  /**
-   * @brief Set the primitives of the scene part
-   * @param primitives Scene part primitives
-   * @see ScenePart::mPrimitives
-   */
-  inline void setPrimitives(std::vector<Primitive*> const& primitives)
-  {
-    this->mPrimitives = primitives;
-  }
   /**
    * @brief Obtain the centroid of the scene part
    * @return Scene part centroid
@@ -338,7 +493,7 @@ public:
    * @see ScenePart::ObjectType
    */
   virtual ObjectType getType() const { return ObjectType::STATIC_OBJECT; }
-  virtual PrimitiveType getPrimitiveType() const { return primitiveType; }
+  virtual GeometryType getGeometryType() const { return geometryType; }
 
   /**
    * @brief Obtain the swap on repeat handler of the scene part.
@@ -380,3 +535,5 @@ public:
   static void computeTransformations(std::shared_ptr<ScenePart> sp,
                                      bool const holistic = false);
 };
+
+BOOST_CLASS_VERSION(ScenePart, 2)

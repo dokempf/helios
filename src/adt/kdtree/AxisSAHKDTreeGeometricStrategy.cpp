@@ -14,7 +14,7 @@ void
 AxisSAHKDTreeGeometricStrategy::GEOM_defineSplit(
   KDTreeNode* node,
   KDTreeNode* parent,
-  std::vector<Primitive*>& primitives,
+  std::vector<GeometryRef>& primitives,
   int const depth,
   int const assignedThreads) const
 {

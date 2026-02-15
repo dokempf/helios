@@ -8,7 +8,7 @@
 #include <scene/dynamic/DynMotion.h>
 #include <scene/dynamic/DynMotionEngine.h>
 #include <scene/dynamic/DynMovingObject.h>
-#include <scene/primitives/Triangle.h>
+#include <scene/sceneparts/TriangleScenePart.h>
 
 TEST_CASE("Rigid motion test")
 {
@@ -325,27 +325,46 @@ TEST_CASE("Rigid motion test")
     rigidmotion::RigidMotionR3Factory rm3f;
     DynMotionEngine dme;
 
-    // Build dynamic moving object for the tests
-    std::vector<Primitive*> primitives;
-    Vertex v0(-1.0, -1.0, 0.0);
-    Vertex v1(1.0, -1.0, 0.0);
-    Vertex v2(0.0, 1.0, 0.0);
-    Vertex v3(0.0, 0.0, 1.0);
-    Triangle tr0(v0, v1, v2);
-    Triangle tr1(v0, v1, v3);
-    Triangle tr2(v0, v2, v3);
-    Triangle tr3(v1, v2, v3);
-    primitives.push_back(&tr0);
-    primitives.push_back(&tr1);
-    primitives.push_back(&tr2);
-    primitives.push_back(&tr3);
-    DynMovingObject dmo("HRMTestDMO", primitives);
+    // Build dynamic moving object for the tests.
+    std::shared_ptr<TriangleScenePart> trisp =
+      std::make_shared<TriangleScenePart>(4);
+    trisp->vertices.zeros(4, 9);
+    trisp->normals.zeros(4, 9);
+    trisp->materialIndex.zeros(4);
+    trisp->materialTable.push_back(std::make_shared<Material>());
+    for (std::size_t i = 0; i < 4; ++i) {
+      trisp->materialIndex(i) = 0;
+    }
+    auto setTriangle = [&](std::size_t row,
+                           glm::dvec3 const& a,
+                           glm::dvec3 const& b,
+                           glm::dvec3 const& c) {
+      trisp->vertices(row, 0) = a.x;
+      trisp->vertices(row, 1) = a.y;
+      trisp->vertices(row, 2) = a.z;
+      trisp->vertices(row, 3) = b.x;
+      trisp->vertices(row, 4) = b.y;
+      trisp->vertices(row, 5) = b.z;
+      trisp->vertices(row, 6) = c.x;
+      trisp->vertices(row, 7) = c.y;
+      trisp->vertices(row, 8) = c.z;
+    };
+    glm::dvec3 const v0(-1.0, -1.0, 0.0);
+    glm::dvec3 const v1(1.0, -1.0, 0.0);
+    glm::dvec3 const v2(0.0, 1.0, 0.0);
+    glm::dvec3 const v3(0.0, 0.0, 1.0);
+    setTriangle(0, v0, v1, v2);
+    setTriangle(1, v0, v1, v3);
+    setTriangle(2, v0, v2, v3);
+    setTriangle(3, v1, v2, v3);
+    DynMovingObject dmo(*trisp);
+    dmo.setId("HRMTestDMO");
     dmo.computeCentroid();
 
     auto validate_dyn_motion = [&](const DynMotion& dm,
                                    const rigidmotion::RigidMotion& rm,
                                    DynMovingObject dynObj) {
-      arma::mat X = dynObj.positionMatrixFromPrimitives();
+      arma::mat X = dynObj.positionMatrixFromGeometry();
       arma::mat dmeY = dme.apply(dm, X, dynObj);
       arma::mat rmeY = rme.apply(rm, X);
       size_t m = dmeY.n_elem, n = rmeY.n_elem;

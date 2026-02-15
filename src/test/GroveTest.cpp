@@ -1,10 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <FastSAHKDTreeFactory.h>
+#include <GeometryRef.h>
 #include <GroveKDTreeRaycaster.h>
 #include <KDGrove.h>
-#include <Primitive.h>
-#include <Triangle.h>
+#include <TriangleScenePart.h>
 
 #include <memory>
 #include <vector>
@@ -13,7 +13,7 @@ struct GroveTestFixture
 {
   KDGrove kdg;
   std::vector<std::shared_ptr<GroveKDTreeRaycaster>> trees;
-  std::vector<std::vector<Primitive*>> primitives;
+  std::vector<std::shared_ptr<TriangleScenePart>> parts;
 
   GroveTestFixture()
   {
@@ -22,72 +22,146 @@ struct GroveTestFixture
     buildGrove();
   }
 
-  ~GroveTestFixture()
-  {
-    for (auto& tris : primitives) {
-      for (Primitive* tri : tris) {
-        delete static_cast<Triangle*>(tri);
-      }
-    }
-  }
+  ~GroveTestFixture() = default;
 
   void buildPrimitives()
   {
+    auto makePart = []() -> std::shared_ptr<TriangleScenePart> {
+      std::shared_ptr<TriangleScenePart> out =
+        std::make_shared<TriangleScenePart>(4);
+      out->vertices.zeros(4, 9);
+      out->normals.zeros(4, 9);
+      out->materialIndex.zeros(4);
+      out->materialTable.push_back(std::make_shared<Material>());
+      for (std::size_t i = 0; i < 4; ++i) {
+        out->materialIndex(i) = 0;
+      }
+      return out;
+    };
+    auto setTriangle = [](TriangleScenePart& part,
+                          std::size_t row,
+                          glm::dvec3 const& a,
+                          glm::dvec3 const& b,
+                          glm::dvec3 const& c) {
+      part.vertices(row, 0) = a.x;
+      part.vertices(row, 1) = a.y;
+      part.vertices(row, 2) = a.z;
+      part.vertices(row, 3) = b.x;
+      part.vertices(row, 4) = b.y;
+      part.vertices(row, 5) = b.z;
+      part.vertices(row, 6) = c.x;
+      part.vertices(row, 7) = c.y;
+      part.vertices(row, 8) = c.z;
+    };
+
     // First tree
-    std::vector<Primitive*> tris1;
-    tris1.push_back(
-      new Triangle(Vertex(-1, -1, -1), Vertex(1, -1, -1), Vertex(0, 1, -1)));
-    tris1.push_back(
-      new Triangle(Vertex(-1, -1, -1), Vertex(1, -1, -1), Vertex(0, 0, 1)));
-    tris1.push_back(
-      new Triangle(Vertex(1, -1, -1), Vertex(0, 0, 1), Vertex(0, 1, -1)));
-    tris1.push_back(
-      new Triangle(Vertex(0, 1, -1), Vertex(0, 0, 1), Vertex(-1, -1, -1)));
-    primitives.push_back(tris1);
+    std::shared_ptr<TriangleScenePart> tris1 = makePart();
+    setTriangle(*tris1,
+                0,
+                glm::dvec3(-1, -1, -1),
+                glm::dvec3(1, -1, -1),
+                glm::dvec3(0, 1, -1));
+    setTriangle(*tris1,
+                1,
+                glm::dvec3(-1, -1, -1),
+                glm::dvec3(1, -1, -1),
+                glm::dvec3(0, 0, 1));
+    setTriangle(*tris1,
+                2,
+                glm::dvec3(1, -1, -1),
+                glm::dvec3(0, 0, 1),
+                glm::dvec3(0, 1, -1));
+    setTriangle(*tris1,
+                3,
+                glm::dvec3(0, 1, -1),
+                glm::dvec3(0, 0, 1),
+                glm::dvec3(-1, -1, -1));
+    parts.push_back(tris1);
 
     // Second tree
-    std::vector<Primitive*> tris2;
-    tris2.push_back(
-      new Triangle(Vertex(0, 0, -1), Vertex(2, 0, -1), Vertex(1, 2, -1)));
-    tris2.push_back(
-      new Triangle(Vertex(0, 0, -1), Vertex(2, 0, -1), Vertex(1, 1, 1)));
-    tris2.push_back(
-      new Triangle(Vertex(2, 0, -1), Vertex(1, 1, 1), Vertex(1, 2, -1)));
-    tris2.push_back(
-      new Triangle(Vertex(1, 2, -1), Vertex(1, 1, 1), Vertex(0, 0, -1)));
-    primitives.push_back(tris2);
+    std::shared_ptr<TriangleScenePart> tris2 = makePart();
+    setTriangle(*tris2,
+                0,
+                glm::dvec3(0, 0, -1),
+                glm::dvec3(2, 0, -1),
+                glm::dvec3(1, 2, -1));
+    setTriangle(*tris2,
+                1,
+                glm::dvec3(0, 0, -1),
+                glm::dvec3(2, 0, -1),
+                glm::dvec3(1, 1, 1));
+    setTriangle(*tris2,
+                2,
+                glm::dvec3(2, 0, -1),
+                glm::dvec3(1, 1, 1),
+                glm::dvec3(1, 2, -1));
+    setTriangle(*tris2,
+                3,
+                glm::dvec3(1, 2, -1),
+                glm::dvec3(1, 1, 1),
+                glm::dvec3(0, 0, -1));
+    parts.push_back(tris2);
 
     // Third tree
-    std::vector<Primitive*> tris3;
-    tris3.push_back(
-      new Triangle(Vertex(4, 4, -1), Vertex(6, 4, -1), Vertex(5, 6, -1)));
-    tris3.push_back(
-      new Triangle(Vertex(4, 4, -1), Vertex(6, 4, -1), Vertex(5, 5, 1)));
-    tris3.push_back(
-      new Triangle(Vertex(6, 4, -1), Vertex(5, 5, 1), Vertex(5, 6, -1)));
-    tris3.push_back(
-      new Triangle(Vertex(5, 6, -1), Vertex(5, 5, 1), Vertex(4, 4, -1)));
-    primitives.push_back(tris3);
+    std::shared_ptr<TriangleScenePart> tris3 = makePart();
+    setTriangle(*tris3,
+                0,
+                glm::dvec3(4, 4, -1),
+                glm::dvec3(6, 4, -1),
+                glm::dvec3(5, 6, -1));
+    setTriangle(*tris3,
+                1,
+                glm::dvec3(4, 4, -1),
+                glm::dvec3(6, 4, -1),
+                glm::dvec3(5, 5, 1));
+    setTriangle(*tris3,
+                2,
+                glm::dvec3(6, 4, -1),
+                glm::dvec3(5, 5, 1),
+                glm::dvec3(5, 6, -1));
+    setTriangle(*tris3,
+                3,
+                glm::dvec3(5, 6, -1),
+                glm::dvec3(5, 5, 1),
+                glm::dvec3(4, 4, -1));
+    parts.push_back(tris3);
 
     // Fourth tree
-    std::vector<Primitive*> tris4;
-    tris4.push_back(
-      new Triangle(Vertex(9, 9, 0), Vertex(11, 9, 0), Vertex(10, 11, 0)));
-    tris4.push_back(
-      new Triangle(Vertex(9, 9, 0), Vertex(11, 9, 0), Vertex(10, 10, -3)));
-    tris4.push_back(
-      new Triangle(Vertex(11, 9, 0), Vertex(10, 10, -3), Vertex(10, 11, 0)));
-    tris4.push_back(
-      new Triangle(Vertex(10, 11, 0), Vertex(10, 10, -3), Vertex(9, 9, 0)));
-    primitives.push_back(tris4);
+    std::shared_ptr<TriangleScenePart> tris4 = makePart();
+    setTriangle(*tris4,
+                0,
+                glm::dvec3(9, 9, 0),
+                glm::dvec3(11, 9, 0),
+                glm::dvec3(10, 11, 0));
+    setTriangle(*tris4,
+                1,
+                glm::dvec3(9, 9, 0),
+                glm::dvec3(11, 9, 0),
+                glm::dvec3(10, 10, -3));
+    setTriangle(*tris4,
+                2,
+                glm::dvec3(11, 9, 0),
+                glm::dvec3(10, 10, -3),
+                glm::dvec3(10, 11, 0));
+    setTriangle(*tris4,
+                3,
+                glm::dvec3(10, 11, 0),
+                glm::dvec3(10, 10, -3),
+                glm::dvec3(9, 9, 0));
+    parts.push_back(tris4);
   }
 
   void buildTrees()
   {
     FastSAHKDTreeFactory kdtf(32, 1, 1, 1);
-    for (auto& tris : primitives) {
+    for (std::shared_ptr<TriangleScenePart> const& tris : parts) {
+      std::vector<GeometryRef> refs;
+      refs.reserve(tris->geometryCount());
+      for (std::size_t i = 0; i < tris->geometryCount(); ++i) {
+        refs.push_back({ tris, i });
+      }
       std::shared_ptr<LightKDTreeNode> tree(
-        kdtf.makeFromPrimitives(tris, true, false));
+        kdtf.makeFromGeometryRefs(refs, true, false));
       trees.push_back(std::make_shared<GroveKDTreeRaycaster>(tree));
     }
   }

@@ -1,4 +1,4 @@
-#include <KDTreePrimitiveComparator.h>
+#include <KDTreeGeometryComparator.h>
 #include <SM_ParallelMergeSort.h>
 #include <SimpleKDTreeBuildChildrenNodesSubTask.h>
 #include <SimpleKDTreeComputeRootNodeBoundariesSubTask.h>
@@ -23,7 +23,7 @@ void
 SimpleKDTreeGeometricStrategy::GEOM_defineSplit(
   KDTreeNode* node,
   KDTreeNode* parent,
-  std::vector<Primitive*>& primitives,
+  std::vector<GeometryRef>& primitives,
   int const depth,
   int const assignedThreads) const
 {
@@ -33,16 +33,16 @@ SimpleKDTreeGeometricStrategy::GEOM_defineSplit(
   // Sort faces along split axis:
   // ATTENTION: Sorting must happen BEFORE splitPos is computed as the median
   // Sort primitives along split axis:
-  SM_ParallelMergeSort<std::vector<Primitive*>::iterator,
-                       KDTreePrimitiveComparator>
+  SM_ParallelMergeSort<std::vector<GeometryRef>::iterator,
+                       KDTreeGeometryComparator>
     sorter(assignedThreads, assignedThreads * 2);
   sorter.sort(primitives.begin(),
               primitives.end(),
-              KDTreePrimitiveComparator(node->splitAxis));
+              KDTreeGeometryComparator(node->splitAxis));
 
   // Compute split position from centroid of median primitive
   auto p = next(primitives.begin(), primitives.size() / 2);
-  node->splitPos = (*p)->getCentroid()[node->splitAxis];
+  node->splitPos = (*p).centroid()[node->splitAxis];
 }
 
 void
@@ -50,7 +50,7 @@ SimpleKDTreeGeometricStrategy::GEOM_computeNodeBoundaries(
   KDTreeNode* node,
   KDTreeNode* parent,
   bool const left,
-  std::vector<Primitive*> const& primitives,
+  std::vector<GeometryRef> const& primitives,
   int assignedThreads)
 {
   // Find surface area and minimum and maximum positions for root node
@@ -93,7 +93,7 @@ SimpleKDTreeGeometricStrategy::GEOM_computeNodeBoundaries(
           Bx[i],
           By[i],
           Bz[i],
-          [&](Primitive* primitive,
+          [&](GeometryRef const& primitive,
               double& ax,
               double& ay,
               double& az,
@@ -115,7 +115,7 @@ SimpleKDTreeGeometricStrategy::GEOM_computeNodeBoundaries(
       Bx[extraThreads],
       By[extraThreads],
       Bz[extraThreads],
-      [&](Primitive* primitive,
+      [&](GeometryRef const& primitive,
           double& ax,
           double& ay,
           double& az,
@@ -147,11 +147,11 @@ SimpleKDTreeGeometricStrategy::GEOM_computeNodeBoundaries(
 
 void
 SimpleKDTreeGeometricStrategy::GEOM_populateSplits(
-  std::vector<Primitive*> const& primitives,
+  std::vector<GeometryRef> const& primitives,
   int const splitAxis,
   double const splitPos,
-  std::vector<Primitive*>& leftPrimitives,
-  std::vector<Primitive*>& rightPrimitives,
+  std::vector<GeometryRef>& leftPrimitives,
+  std::vector<GeometryRef>& rightPrimitives,
   int assignedThreads) const
 {
   // Distribute workload
@@ -159,8 +159,8 @@ SimpleKDTreeGeometricStrategy::GEOM_populateSplits(
   if (assignedThreads > (int)numPrimitives)
     assignedThreads = (int)numPrimitives;
   std::size_t const chunkSize = numPrimitives / ((std::size_t)assignedThreads);
-  std::vector<std::vector<Primitive*>> leftPrims(assignedThreads);
-  std::vector<std::vector<Primitive*>> rightPrims(assignedThreads);
+  std::vector<std::vector<GeometryRef>> leftPrims(assignedThreads);
+  std::vector<std::vector<GeometryRef>> rightPrims(assignedThreads);
   int const extraThreads = assignedThreads - 1;
   std::shared_ptr<SharedTaskSequencer> stSequencer =
     std::make_shared<SharedTaskSequencer>(extraThreads);
@@ -174,11 +174,11 @@ SimpleKDTreeGeometricStrategy::GEOM_populateSplits(
       rightPrims[i],
       i * chunkSize,
       (i + 1) * chunkSize,
-      [&](Primitive* p,
+      [&](GeometryRef const& p,
           int const splitAxis,
           double const splitPos,
-          std::vector<Primitive*>& leftPrimitives,
-          std::vector<Primitive*>& rightPrimitives) -> void {
+          std::vector<GeometryRef>& leftPrimitives,
+          std::vector<GeometryRef>& rightPrimitives) -> void {
         kdtf.onPopulateSplitsDigestPrimitive(
           p, splitAxis, splitPos, leftPrimitives, rightPrimitives);
       }));
@@ -192,11 +192,11 @@ SimpleKDTreeGeometricStrategy::GEOM_populateSplits(
     rightPrims[extraThreads],
     extraThreads * chunkSize,
     numPrimitives,
-    [&](Primitive* p,
+    [&](GeometryRef const& p,
         int const splitAxis,
         double const splitPos,
-        std::vector<Primitive*>& leftPrimitives,
-        std::vector<Primitive*>& rightPrimitives) -> void {
+        std::vector<GeometryRef>& leftPrimitives,
+        std::vector<GeometryRef>& rightPrimitives) -> void {
       kdtf.onPopulateSplitsDigestPrimitive(
         p, splitAxis, splitPos, leftPrimitives, rightPrimitives);
     })();
@@ -217,11 +217,11 @@ void
 SimpleKDTreeGeometricStrategy::GEOM_buildChildrenNodes(
   KDTreeNode* node,
   KDTreeNode* parent,
-  std::vector<Primitive*> const& primitives,
+  std::vector<GeometryRef> const& primitives,
   int const depth,
   int const index,
-  std::vector<Primitive*>& leftPrimitives,
-  std::vector<Primitive*>& rightPrimitives,
+  std::vector<GeometryRef>& leftPrimitives,
+  std::vector<GeometryRef>& rightPrimitives,
   std::shared_ptr<SharedTaskSequencer> masters)
 {
   // If there are primitives on both partitions, binary split the node

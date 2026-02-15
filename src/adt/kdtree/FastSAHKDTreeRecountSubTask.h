@@ -1,7 +1,7 @@
 #pragma once
 
 #include <AABB.h>
-#include <Primitive.h>
+#include <GeometryRef.h>
 #include <SharedSubTask.h>
 #include <SharedTaskSequencer.h>
 
@@ -28,11 +28,11 @@ protected:
   /**
    * @brief First primitive to be considered by the recount (inclusive)
    */
-  std::vector<Primitive*>::iterator beginPrimitive;
+  std::vector<GeometryRef>::iterator beginPrimitive;
   /**
    * @brief Last primitive to be considered by the recount (exclusive)
    */
-  std::vector<Primitive*>::iterator endPrimitive;
+  std::vector<GeometryRef>::iterator endPrimitive;
   /**
    * @brief How many bins use to cound
    */
@@ -61,8 +61,8 @@ public:
                               int const splitAxis,
                               double const minp,
                               double const deltap,
-                              std::vector<Primitive*>::iterator beginPrimitive,
-                              std::vector<Primitive*>::iterator endPrimitive,
+                              std::vector<GeometryRef>::iterator beginPrimitive,
+                              std::vector<GeometryRef>::iterator endPrimitive,
                               std::size_t const lossNodes,
                               std::size_t const lossCases,
                               std::vector<std::size_t>& cForward,
@@ -93,10 +93,16 @@ public:
     // Count min and max vertices
     std::vector<std::size_t> minCount(lossNodes, 0);
     std::vector<std::size_t> maxCount(lossNodes, 0);
-    for (std::vector<Primitive*>::iterator currentPrimitive = beginPrimitive;
+    for (std::vector<GeometryRef>::iterator currentPrimitive = beginPrimitive;
          currentPrimitive < endPrimitive;
          ++currentPrimitive) {
-      AABB* aabb = (*currentPrimitive)->getAABB();
+      std::shared_ptr<AABB> aabb =
+        currentPrimitive->isValid()
+          ? currentPrimitive->part->geometryAABB(currentPrimitive->index)
+          : nullptr;
+      if (aabb == nullptr) {
+        continue;
+      }
       double const minq = aabb->getMin()[splitAxis];
       double const maxq = aabb->getMax()[splitAxis];
       ++minCount[std::min<size_t>(

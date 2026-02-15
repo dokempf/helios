@@ -1,15 +1,13 @@
 #pragma once
 
-#include <Primitive.h>
 #include <Vertex.h>
 
-#include <set>
 #include <unordered_set>
 
 /**
  * @brief Class representing an Axis Aligned Bounding Box (AABB)
  */
-class AABB : public Primitive
+class AABB
 {
 private:
   // ***  SERIALIZATION  *** //
@@ -24,8 +22,6 @@ private:
   template<typename Archive>
   void serialize(Archive& ar, const unsigned int version)
   {
-    boost::serialization::void_cast_register<AABB, Primitive>();
-    ar& boost::serialization::base_object<Primitive>(*this);
     ar & vertices;
     ar & bounds;
   }
@@ -81,19 +77,7 @@ public:
   /**
    * @brief Default destructor for axis aligned bounding box
    */
-  ~AABB() override = default;
-  /**
-   * @brief Generate a clone of the primitive
-   * @return Pointer to the clone of the primitive
-   * @see Primitive::clone
-   */
-  Primitive* clone() override;
-  /**
-   * @brief Assist clone function
-   * @param p Pointer to the clone to be updated
-   * @see Primitive::_clone
-   */
-  void _clone(Primitive* p) override;
+  ~AABB() = default;
 
   // ***  M E T H O D S  *** //
   // *********************** //
@@ -112,21 +96,16 @@ public:
   /**
    * @brief Obtain this axis aligned bounding box
    * @return The axis aligned bounding box itself
-   * @see Primitive::getAABB
    */
-  AABB* getAABB() override;
+  AABB* getAABB();
   /**
    * @brief Get the centroid of the axis aligned bounding box
    * @return Centroid of the axis aligned bounding box
-   * @see Primitive::getCentroid
    */
-  glm::dvec3 getCentroid() override;
-  /**
-   * @see Primitive::getIncidenceAngle_rad
-   */
+  glm::dvec3 getCentroid();
   double getIncidenceAngle_rad(const glm::dvec3& rayOrigin,
                                const glm::dvec3& rayDir,
-                               const glm::dvec3& intersectionPoint) override;
+                               const glm::dvec3& intersectionPoint);
   /**
    * <b><span style="color: red">WARNING</span>!</b> The returned
    *  intersection times should be interpreted as follows, where \f$t_*\f$
@@ -149,31 +128,22 @@ public:
    *  at all.
    *
    *
-   * @see Primitive::getRayIntersection
    */
   std::vector<double> getRayIntersection(const glm::dvec3& rayOrigin,
-                                         const glm::dvec3& rayDir) override;
+                                         const glm::dvec3& rayDir);
   /**
-   * @see Primitive::getRayIntersectionDistance
    */
   double getRayIntersectionDistance(const glm::dvec3& rayOrigin,
-                                    const glm::dvec3& rayDir) override;
+                                    const glm::dvec3& rayDir);
   /**
-   * @see Primitive::getNumVertices
+   * @brief Number of vertices used to represent the AABB.
    */
-  std::size_t getNumVertices() override { return 2; }
+  std::size_t getNumVertices() const { return 2; }
   /**
-   * @see Primitive::getVertices
+   * @brief Access underlying min/max vertices.
    */
-  Vertex* getVertices() override;
+  Vertex* getVertices();
 
-  /**
-   * @brief Build an axis aligned bounding box containing given primitives
-   * @param primitives Primitives to build axis aligned bounding box around
-   * @return Axis aligned bounding box containing given primitives
-   */
-  static std::shared_ptr<AABB> getForPrimitives(
-    std::vector<Primitive*>& primitives);
   /**
    * @brief Build an axis aligned bounding box containing given vertices
    * @param verts Vertices to build axis aligned bounding box around
@@ -188,9 +158,9 @@ public:
   static std::shared_ptr<AABB> getForVertices(
     std::unordered_set<Vertex*, VertexKeyHash, VertexKeyEqual>& verts);
   /**
-   * @see Primitive::update
+   * @brief Update cached values (no-op for utility AABB).
    */
-  void update() override {}
+  void update() {}
 
   /**
    * @brief Obtain size along each axis for the axis aligned bounding box

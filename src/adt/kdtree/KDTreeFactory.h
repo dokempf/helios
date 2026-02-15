@@ -1,5 +1,6 @@
 #pragma once
 
+#include <GeometryRef.h>
 #include <KDTreeNode.h>
 #include <KDTreeNodeRoot.h>
 #include <LightKDTreeNode.h>
@@ -85,39 +86,23 @@ public:
   // ***  K-DIMENSIONAL TREE FACTORY METHODS  *** //
   // **********************+********************* //
   /**
-   * @brief Build a KDTree from given primitives
-   * @param primitives Primitives to build KDTree splitting them
-   * @param computeStats If true, KDTree stats will be computed. If false,
-   *  they will not
-   * @param reportStats If true, KDTree stats will be reported. If false,
-   *  they will not. Notice stats can only be reported if computeStats flag
-   *  is setted to true too.
-   * @return Pointer to root node of built KDTree
+   * @brief Build a KDTree from geometry references.
    */
-  virtual KDTreeNodeRoot* makeFromPrimitivesUnsafe(
-    std::vector<Primitive*>& primitives,
+  virtual KDTreeNodeRoot* makeFromGeometryRefsUnsafe(
+    std::vector<GeometryRef>&,
     bool const computeStats = false,
     bool const reportStats = false) = 0;
   /**
-   * @brief Safe wrapper from makeFromPrimitivesUnsafe which handles a copy
-   *  to make from primitives by default. This function behavior might be
-   *  overridden by any derived/child class. It is expected that any
-   *  implementation of makeFromPrimitives provides a way to implement
-   *  the makeFromPrimitivesUnsafe method without modifying vector of input
-   *  primitives. Notice this does not mean primitives themselves cannot be
-   *  modified, that depends on the type of KDTreeFactory. It only means
-   *  that the vector itself will not be modified, for instance due to
-   *  sorting purposes.
-   * @see KDTreeFactory::makeFromPrimitivesUnsafe
+   * @brief Safe wrapper for makeFromGeometryRefsUnsafe.
    */
-  virtual KDTreeNodeRoot* makeFromPrimitives(
-    std::vector<Primitive*> const& primitives,
+  virtual KDTreeNodeRoot* makeFromGeometryRefs(
+    std::vector<GeometryRef> const& geometryRefs,
     bool const computeStats = false,
     bool const reportStats = false)
   {
-    std::vector<Primitive*> prims = primitives; // Copy to work over
-    return makeFromPrimitivesUnsafe(prims, computeStats, reportStats);
-  };
+    std::vector<GeometryRef> refs = geometryRefs;
+    return makeFromGeometryRefsUnsafe(refs, computeStats, reportStats);
+  }
 
   // ***  GETTERs and SETTERs  *** //
   // ***************************** //

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <KDTreePrimitiveComparator.h>
+#include <KDTreeGeometryComparator.h>
 #include <SimpleKDTreeFactory.h>
 
 class MultiThreadSAHKDTreeFactory;
@@ -321,7 +321,7 @@ public:
    */
   void defineSplit(KDTreeNode* node,
                    KDTreeNode* parent,
-                   std::vector<Primitive*>& primitives,
+                   std::vector<GeometryRef>& primitives,
                    int const depth) const override;
 
   /**
@@ -398,11 +398,11 @@ public:
    */
   void buildChildrenNodes(KDTreeNode* node,
                           KDTreeNode* parent,
-                          std::vector<Primitive*> const& primitives,
+                          std::vector<GeometryRef> const& primitives,
                           int const depth,
                           int const index,
-                          std::vector<Primitive*>& leftPrimitives,
-                          std::vector<Primitive*>& rightPrimitives) override;
+                          std::vector<GeometryRef>& leftPrimitives,
+                          std::vector<GeometryRef>& rightPrimitives) override;
 
   /**
    * @brief The recipe for building of children nodes by SAH algorithm. It is
@@ -421,16 +421,16 @@ public:
   virtual void buildChildrenNodesRecipe(
     KDTreeNode* node,
     KDTreeNode* parent,
-    std::vector<Primitive*> const& primitives,
+    std::vector<GeometryRef> const& primitives,
     int const depth,
     int const index,
-    std::vector<Primitive*>& leftPrimitives,
-    std::vector<Primitive*>& rightPrimitives,
+    std::vector<GeometryRef>& leftPrimitives,
+    std::vector<GeometryRef>& rightPrimitives,
     std::function<void(KDTreeNode* node,
                        int const depth,
                        int const index,
-                       std::vector<Primitive*>& leftPrimitives,
-                       std::vector<Primitive*>& rightPrimitives)>
+                       std::vector<GeometryRef>& leftPrimitives,
+                       std::vector<GeometryRef>& rightPrimitives)>
       f_buildChildrenNodes);
 
 protected:
@@ -447,9 +447,9 @@ protected:
    * @see SimpleKDTreeFactory::minSplitPrimitives
    */
   bool checkNodeMustSplit(
-    std::vector<Primitive*> const& primitives,
-    std::vector<Primitive*> const& leftPrimitives,
-    std::vector<Primitive*> const& rightPrimitives) const override;
+    std::vector<GeometryRef> const& primitives,
+    std::vector<GeometryRef> const& leftPrimitives,
+    std::vector<GeometryRef> const& rightPrimitives) const override;
 
   // ***  SAH UTILS  *** //
   // ******************* //
@@ -481,7 +481,7 @@ protected:
    * @see SAHKDTreeFactory::defineSplit
    * @see SAHKDTreeFactory::lossNodes
    */
-  virtual double splitLoss(std::vector<Primitive*> const& primitives,
+  virtual double splitLoss(std::vector<GeometryRef> const& primitives,
                            int const splitAxis,
                            double const splitPos,
                            double const r) const;
@@ -500,7 +500,7 @@ protected:
    * @see SAHKDTreeFactory::findSplitPositionBySAHRecipe
    * @see SAHKDTreeFactory::splitLoss
    */
-  virtual void computeBestSplit(std::vector<Primitive*>& primitives,
+  virtual void computeBestSplit(std::vector<GeometryRef>& primitives,
                                 size_t const lossNodes,
                                 double const start,
                                 double const step,
@@ -519,7 +519,7 @@ protected:
    */
   virtual double findSplitPositionBySAH(
     KDTreeNode* node,
-    std::vector<Primitive*>& primitives) const;
+    std::vector<GeometryRef>& primitives) const;
 
   /**
    * @brief The recipe for finding split position by SAH algorithm. It is
@@ -541,11 +541,11 @@ protected:
    */
   virtual double findSplitPositionBySAHRecipe(
     KDTreeNode* node,
-    std::vector<Primitive*>& primitives,
-    std::function<void(std::vector<Primitive*>::iterator begin,
-                       std::vector<Primitive*>::iterator end,
-                       KDTreePrimitiveComparator comparator)> f_sortPrimitives,
-    std::function<void(std::vector<Primitive*>& primitives,
+    std::vector<GeometryRef>& primitives,
+    std::function<void(std::vector<GeometryRef>::iterator begin,
+                       std::vector<GeometryRef>::iterator end,
+                       KDTreeGeometryComparator comparator)> f_sortPrimitives,
+    std::function<void(std::vector<GeometryRef>& primitives,
                        size_t const lossNodes,
                        double const start,
                        double const step,
@@ -572,14 +572,15 @@ protected:
    * @param[in] primitives Primitives defining the object/leaf cluster
    * @return \f$C_T\f$ as heuristic ILOT
    */
-  virtual double heuristicILOT(double& hi,
-                               double& hl,
-                               double& ho,
-                               double& ht,
-                               double const surfaceAreaRoot,
-                               double const surfaceAreaInterior,
-                               double const surfaceAreaLeaf,
-                               std::vector<Primitive*> const& primitives) const;
+  virtual double heuristicILOT(
+    double& hi,
+    double& hl,
+    double& ho,
+    double& ht,
+    double const surfaceAreaRoot,
+    double const surfaceAreaInterior,
+    double const surfaceAreaLeaf,
+    std::vector<GeometryRef> const& primitives) const;
 
   /**
    * @brief Compute the cumulative of \f$C_T\f$ heuristic ILOT.
@@ -624,9 +625,9 @@ protected:
                                double& ho,
                                double& ht,
                                KDTreeNode* node,
-                               std::vector<Primitive*> const& primitives,
-                               std::vector<Primitive*> const& leftPrimitives,
-                               std::vector<Primitive*> const& rightPrimitives);
+                               std::vector<GeometryRef> const& primitives,
+                               std::vector<GeometryRef> const& leftPrimitives,
+                               std::vector<GeometryRef> const& rightPrimitives);
 
   // ***  CACHE UTILS  *** //
   // ********************* //
@@ -691,7 +692,7 @@ protected:
    * @param primitives Primitives contained in root node
    */
   virtual void initILOT(KDTreeNode* root,
-                        std::vector<Primitive*> const& primitives);
+                        std::vector<GeometryRef> const& primitives);
   /**
    * @brief Set the cached root node
    * @param root The new root node to be cached

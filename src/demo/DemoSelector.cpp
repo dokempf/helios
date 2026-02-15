@@ -6,7 +6,6 @@
 
 #include <demo/DynamicSceneDemo.h>
 #include <demo/RaycastingDemo.h>
-#include <demo/SimplePrimitivesDemo.h>
 
 using HeliosDemos::DemoSelector;
 using std::make_shared;
@@ -36,8 +35,9 @@ HeliosDemos::DemoSelector::select(string const name,
   using std::stringstream;
 
   // Handle demo
-  if (name == "simple_primitives") { // Handle simple primitives demo
-    HeliosDemos::SimplePrimitivesDemo().run();
+  if (name == "simple_primitives") {
+    throw HeliosException(
+      "simple_primitives demo was removed during scene-geometry refactor.");
   } else if (name == "dynamic_scene") { // Handle dynamic scene demo
     HeliosDemos::DynamicSceneDemo(surveyPath, assetsPath).run();
   } else if (name == "raycasting") { // Handle ray casting demo

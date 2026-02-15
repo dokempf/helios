@@ -155,8 +155,8 @@ public:
   /**
    * @see DynObject::DynObject(ScenePart const &, bool const)
    */
-  DynMovingObject(ScenePart const& sp, bool const shallowPrimitives = false)
-    : DynObject(sp, shallowPrimitives)
+  DynMovingObject(ScenePart const& sp, bool const shallowGeometry = false)
+    : DynObject(sp, shallowGeometry)
     , kdGroveObserver(nullptr)
     , observerStepLoop(1, [&]() -> void { doObserverUpdate(); })
     , observerDynTimeStep(std::numeric_limits<double>::quiet_NaN())
@@ -167,27 +167,6 @@ public:
    */
   DynMovingObject(std::string const id)
     : DynObject(id)
-    , kdGroveObserver(nullptr)
-    , observerStepLoop(1, [&]() -> void { doObserverUpdate(); })
-    , observerDynTimeStep(std::numeric_limits<double>::quiet_NaN())
-  {
-  }
-  /**
-   * @see DynObject::DynObject(vector<Primitive *> const &)
-   */
-  DynMovingObject(std::vector<Primitive*> const& primitives)
-    : DynObject(primitives)
-    , kdGroveObserver(nullptr)
-    , observerStepLoop(1, [&]() -> void { doObserverUpdate(); })
-    , observerDynTimeStep(std::numeric_limits<double>::quiet_NaN())
-  {
-  }
-  /**
-   * @see DynObject::DynObject(string const, vector<Primitive *> const &)
-   */
-  DynMovingObject(std::string const id,
-                  std::vector<Primitive*> const& primitives)
-    : DynObject(id, primitives)
     , kdGroveObserver(nullptr)
     , observerStepLoop(1, [&]() -> void { doObserverUpdate(); })
     , observerDynTimeStep(std::numeric_limits<double>::quiet_NaN())
@@ -247,9 +226,9 @@ protected:
    *  efficient way. Functions to extract dynamic motion queue elements and to
    *  read and update primitives must be given as input arguments.
    *
-   * @param matrixFromPrimitives Function to get a matrix from primitives
+   * @param matrixFromGeometry Function to get a matrix from primitives
    *  composing the dynamic object
-   * @param matrixToPrimitives Function to update primitives from a given
+   * @param matrixToGeometry Function to update primitives from a given
    *  matrix
    * @param queueHasNext Function to check whether the queue has dynamic
    *  motions left (true) or not (false)
@@ -257,8 +236,8 @@ protected:
    * @return True if modifications occurred, false otherwise
    */
   bool applyDynMotionQueue(
-    std::function<arma::mat()> matrixFromPrimitives,
-    std::function<void(arma::mat const& X)> matrixToPrimitives,
+    std::function<arma::mat()> matrixFromGeometry,
+    std::function<void(arma::mat const& X)> matrixToGeometry,
     std::function<bool()> queueHasNext,
     std::function<std::shared_ptr<DynMotion>()> queueNext);
 

@@ -4,10 +4,12 @@
 
 #pragma once
 
+#include <Vertex.h>
+
+#include <memory>
 #include <vector>
 
-// Forward declaration
-class Primitive;
+class Material;
 
 /**
  * @brief Class representing a .obj loaded file
@@ -16,9 +18,18 @@ class WavefrontObj
 {
 public:
   /**
-   * @brief Vector containing pointers to the primitives of the obj
+   * @brief Triangle record extracted from an OBJ face.
    */
-  std::vector<Primitive*> primitives{};
+  struct TriangleRecord
+  {
+    Vertex verts[3];
+    std::shared_ptr<Material> material = nullptr;
+  };
+
+  /**
+   * @brief Triangles loaded from the OBJ file.
+   */
+  std::vector<TriangleRecord> triangles{};
 
   WavefrontObj() = default;
   ~WavefrontObj();

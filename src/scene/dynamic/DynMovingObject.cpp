@@ -1,5 +1,6 @@
 #include <adt/grove/KDGrove.h>
 #include <scene/dynamic/DynMovingObject.h>
+#include <util/HeliosException.h>
 
 #include <functional>
 
@@ -23,25 +24,26 @@ DynMovingObject::doSimStep()
 
   // Apply position dynamic motions, if any
   modified |= applyDynMotionQueue(
-    [=]() -> arma::mat { return this->positionMatrixFromPrimitives(); },
+    [=]() -> arma::mat { return this->positionMatrixFromGeometry(); },
     [=](arma::mat const& X) -> void {
-      this->updatePrimitivesPositionFromMatrix(X);
+      this->updateGeometryPositionFromMatrix(X);
     },
     [=]() -> bool { return this->positionMotionQueueHasNext(); },
     [=]() -> std::shared_ptr<DynMotion> { return this->nextPositionMotion(); });
 
   // Apply normal dynamic motions, if any
   modified |= applyDynMotionQueue(
-    [=]() -> arma::mat { return this->normalMatrixFromPrimitives(); },
+    [=]() -> arma::mat { return this->normalMatrixFromGeometry(); },
     [=](arma::mat const& X) -> void {
-      this->updatePrimitivesNormalFromMatrix(X);
+      this->updateGeometryNormalFromMatrix(X);
     },
     [=]() -> bool { return this->normalMotionQueueHasNext(); },
     [=]() -> std::shared_ptr<DynMotion> { return this->nextNormalMotion(); });
 
   // Update primitives
-  for (Primitive* prim : mPrimitives)
-    prim->update();
+  for (std::size_t i = 0; i < geometryCount(); ++i) {
+    geometryUpdate(i);
+  }
 
   // Notify observer if modified
   if (modified && kdGroveObserver != nullptr) {
@@ -61,8 +63,8 @@ DynMovingObject::doObserverUpdate()
 
 bool
 DynMovingObject::applyDynMotionQueue(
-  std::function<arma::mat()> matrixFromPrimitives,
-  std::function<void(arma::mat const& X)> matrixToPrimitives,
+  std::function<arma::mat()> matrixFromGeometry,
+  std::function<void(arma::mat const& X)> matrixToGeometry,
   std::function<bool()> queueHasNext,
   std::function<std::shared_ptr<DynMotion>()> queueNext)
 {
@@ -71,7 +73,7 @@ DynMovingObject::applyDynMotionQueue(
 
   // Apply dynamic motions from queue, if any
   if (queueHasNext()) {
-    arma::mat X = matrixFromPrimitives();
+    arma::mat X = matrixFromGeometry();
     std::shared_ptr<DynMotion> dm = nullptr;
     while (queueHasNext()) {
       if (dm == nullptr)
@@ -81,7 +83,7 @@ DynMovingObject::applyDynMotionQueue(
       }
     }
     X = dme.apply(*dm, X, *this);
-    matrixToPrimitives(X);
+    matrixToGeometry(X);
     modified = true;
   }
 

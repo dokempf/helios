@@ -91,15 +91,15 @@ readMaterialFromFile(std::string materialPath,
                      std::string materialId);
 
 void
-applyMaterialToPrimitivesRange(std::shared_ptr<ScenePart> scenePart,
-                               std::shared_ptr<Material> material,
-                               size_t range_start,
-                               size_t range_stop);
+applyMaterialToGeometryRange(std::shared_ptr<ScenePart> scenePart,
+                             std::shared_ptr<Material> material,
+                             size_t range_start,
+                             size_t range_stop);
 
 void
-applyMaterialToPrimitivesIndices(std::shared_ptr<ScenePart> scenePart,
-                                 std::shared_ptr<Material> material,
-                                 const std::vector<size_t>& indices);
+applyMaterialToGeometryIndices(std::shared_ptr<ScenePart> scenePart,
+                               std::shared_ptr<Material> material,
+                               const std::vector<size_t>& indices);
 
 void
 changeMaterialInstance(std::shared_ptr<ScenePart> scenePart,

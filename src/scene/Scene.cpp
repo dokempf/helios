@@ -12,8 +12,10 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/string_cast.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <fstream>
+#include <limits>
 #include <unordered_set>
 
 #if DATA_ANALYTICS >= 2
@@ -24,6 +26,72 @@ using helios::analytics::HDA_GV;
 using SurfaceInspector::maths::Plane;
 using SurfaceInspector::maths::PlaneFitter;
 
+namespace {
+std::shared_ptr<AABB>
+computeSceneBoundFromParts(std::vector<std::shared_ptr<ScenePart>> const& parts)
+{
+  double minX = std::numeric_limits<double>::max();
+  double minY = std::numeric_limits<double>::max();
+  double minZ = std::numeric_limits<double>::max();
+  double maxX = std::numeric_limits<double>::lowest();
+  double maxY = std::numeric_limits<double>::lowest();
+  double maxZ = std::numeric_limits<double>::lowest();
+  bool found = false;
+  for (std::shared_ptr<ScenePart> const& part : parts) {
+    if (part == nullptr || part->geometryCount() == 0) {
+      continue;
+    }
+    std::shared_ptr<AABB> const partBound = part->computeBound();
+    if (partBound == nullptr) {
+      continue;
+    }
+    glm::dvec3 const& mn = partBound->getMin();
+    glm::dvec3 const& mx = partBound->getMax();
+    minX = std::min(minX, mn.x);
+    minY = std::min(minY, mn.y);
+    minZ = std::min(minZ, mn.z);
+    maxX = std::max(maxX, mx.x);
+    maxY = std::max(maxY, mx.y);
+    maxZ = std::max(maxZ, mx.z);
+    found = true;
+  }
+  if (!found) {
+    return nullptr;
+  }
+  return std::make_shared<AABB>(glm::dvec3(minX, minY, minZ),
+                                glm::dvec3(maxX, maxY, maxZ));
+}
+
+std::size_t
+countSceneVerticesFromParts(
+  std::vector<std::shared_ptr<ScenePart>> const& parts)
+{
+  std::size_t numVertices = 0;
+  for (std::shared_ptr<ScenePart> const& part : parts) {
+    if (part == nullptr) {
+      continue;
+    }
+    for (std::size_t i = 0; i < part->geometryCount(); ++i) {
+      numVertices += part->geometryVertexCount(i);
+    }
+  }
+  return numVertices;
+}
+
+std::vector<glm::dvec3>
+collectPartDynamicVertices(ScenePart const& part)
+{
+  std::vector<glm::dvec3> vertices;
+  for (std::size_t i = 0; i < part.geometryCount(); ++i) {
+    std::size_t const n = part.geometryDynamicVertexCount(i);
+    for (std::size_t j = 0; j < n; ++j) {
+      vertices.push_back(part.geometryDynamicVertexPosition(i, j));
+    }
+  }
+  return vertices;
+}
+}
+
 // ***  CONSTRUCTION / DESTRUCTION  *** //
 // ************************************ //
 Scene::Scene(Scene& s)
@@ -31,36 +99,23 @@ Scene::Scene(Scene& s)
   if (s.bbox == nullptr)
     this->bbox = nullptr;
   else
-    this->bbox = std::shared_ptr<AABB>((AABB*)s.bbox->clone());
+    this->bbox = std::make_shared<AABB>(*s.bbox);
   if (s.bbox_crs == nullptr)
     this->bbox_crs = nullptr;
   else
-    this->bbox_crs = std::shared_ptr<AABB>((AABB*)s.bbox_crs->clone());
-  std::set<ScenePart*> _parts; // Pointer to each ScenePart, no repeats
-  std::vector<Primitive*> nonPartPrimitives; // Primitives without ScenePart
-  ScenePart* _sp;
-  Primitive* _p;
-  for (size_t i = 0; i < s.primitives.size(); i++) { // Fill parts
-    _p = s.primitives[i];
-    _sp = _p->part.get();
-    if (_sp != nullptr)
-      _parts.insert(_sp); // Primitive with part
-    else
-      nonPartPrimitives.push_back(_p); // Primitive with no part
-  }
-  for (ScenePart* sp : _parts) { // Handle primitives associated with ScenePart
-    std::shared_ptr<ScenePart> spc = std::make_shared<ScenePart>(*sp);
-    for (Primitive* p : spc->mPrimitives) {
-      p->part = spc;
-      this->primitives.push_back(p);
+    this->bbox_crs = std::make_shared<AABB>(*s.bbox_crs);
+  for (std::shared_ptr<ScenePart> const& part : s.parts) {
+    if (part == nullptr) {
+      continue;
     }
-  }
-  for (Primitive* p : nonPartPrimitives) { // Handle primitives with no part
-    this->primitives.push_back(p->clone());
+    std::shared_ptr<ScenePart> cloned = part->clone(false);
+    cloned->bindGeometryOwners(cloned);
+    parts.push_back(cloned);
   }
 
-  registerParts();
   this->kdgf = s.kdgf;
+  registerParts();
+  rebuildGeometryRefs();
   if (s.parts.empty()) {
     kdgrove = nullptr;
   } else {
@@ -73,33 +128,35 @@ Scene::Scene(Scene& s)
 bool
 Scene::finalizeLoading(bool const safe)
 {
-  if (primitives.empty())
+  registerParts();
+  rebuildGeometryRefs();
+  if (geometryRefs.empty())
     return false;
 
-  // #####   UPDATE PRIMITIVES ON FINISH LOADING   #####
+  // #####   UPDATE SCENE PART GEOMETRY ON FINISH LOADING   #####
   UniformNoiseSource<double> uns(*DEFAULT_RG, -1, 1);
-  for (Primitive* p : primitives) {
-    p->onFinishLoading(uns);
+  for (GeometryRef const& ref : geometryRefs) {
+    if (ref.isValid()) {
+      ref.part->geometryOnFinishLoading(ref.index, uns);
+    }
   }
 
   // Report number of primitives in the scene
   std::ostringstream s;
-  s << "Total # of primitives in scene: " << primitives.size() << "\n";
+  s << "Total # of primitives in scene: " << geometryRefs.size() << "\n";
   logging::DEBUG(s.str());
-  if (primitives.size() == 0)
-    return false;
 
   // Compute the number of vertices in the scene
-  std::size_t numVertices = 0;
-  for (Primitive* p : primitives)
-    numVertices += p->getNumVertices();
+  std::size_t const numVertices = countSceneVerticesFromParts(parts);
 
-  // Register all parts and translate to ground those flagged as forceOnGround
-  registerParts();
+  // Translate to ground those flagged as forceOnGround
   doForceOnGround();
 
   // Store original bounding box (CRS coordinates):
-  this->bbox_crs = AABB::getForPrimitives(primitives);
+  this->bbox_crs = computeSceneBoundFromParts(parts);
+  if (this->bbox_crs == nullptr) {
+    return false;
+  }
   glm::dvec3 const diff = this->bbox_crs->getCentroid();
   std::stringstream ss;
   ss << "CRS bounding box (by vertices): " << this->bbox_crs->toString()
@@ -108,21 +165,25 @@ Scene::finalizeLoading(bool const safe)
   logging::INFO(ss.str());
   ss.str("");
 
-  // Iterate over the primitives and translate each vertex:
-  for (Primitive* p : primitives) {
-    Vertex* v = p->getVertices();
-    for (std::size_t i = 0; i < p->getNumVertices(); i++) {
-      v[i].pos = v[i].pos - diff;
+  // Translate each part geometry to scene-local coordinates.
+  for (std::shared_ptr<ScenePart>& part : parts) {
+    if (part == nullptr) {
+      continue;
     }
-    p->update();
+    for (std::size_t i = 0; i < part->geometryCount(); ++i) {
+      part->geometryTranslate(i, -diff);
+      part->geometryUpdate(i);
+    }
   }
 
   // Get new bounding box of translated scene:
-  this->bbox = AABB::getForPrimitives(primitives);
+  this->bbox = computeSceneBoundFromParts(parts);
 
-  ss << "Actual bounding box (by vertices): " << this->bbox->toString();
-  logging::INFO(ss.str());
-  ss.str("");
+  if (this->bbox != nullptr) {
+    ss << "Actual bounding box (by vertices): " << this->bbox->toString();
+    logging::INFO(ss.str());
+    ss.str("");
+  }
 
   // ################ END Shift primitives to originWaypoint ##################
 
@@ -140,17 +201,47 @@ Scene::finalizeLoading(bool const safe)
 void
 Scene::registerParts()
 {
-  // Find scene parts from primitives
-  std::unordered_set<std::shared_ptr<ScenePart>> partsSet;
-  for (Primitive* primitive : primitives)
-    if (primitive->part != nullptr)
-      partsSet.insert(primitive->part);
-  // Remove already registered scene parts
-  std::unordered_set<std::shared_ptr<ScenePart>>::iterator it;
-  for (std::shared_ptr<ScenePart> part : parts)
-    partsSet.erase(part);
-  // Register all new scene parts
-  parts.insert(parts.end(), partsSet.begin(), partsSet.end());
+  // Keep pre-existing unique parts.
+  std::unordered_set<ScenePart*> seen;
+  std::vector<std::shared_ptr<ScenePart>> registered;
+  registered.reserve(parts.size());
+
+  for (std::shared_ptr<ScenePart> const& part : parts) {
+    if (part == nullptr) {
+      continue;
+    }
+    if (seen.insert(part.get()).second) {
+      registered.push_back(part);
+    }
+  }
+  parts.swap(registered);
+}
+
+void
+Scene::clearGeometryRefs()
+{
+  geometryRefs.clear();
+}
+
+void
+Scene::rebuildGeometryRefs()
+{
+  geometryRefs.clear();
+  std::size_t total = 0;
+  for (std::shared_ptr<ScenePart> const& part : parts) {
+    if (part != nullptr) {
+      total += part->geometryCount();
+    }
+  }
+  geometryRefs.reserve(total);
+  for (std::shared_ptr<ScenePart> const& part : parts) {
+    if (part == nullptr) {
+      continue;
+    }
+    for (std::size_t i = 0; i < part->geometryCount(); ++i) {
+      geometryRefs.push_back({ part, i });
+    }
+  }
 }
 
 std::shared_ptr<AABB>
@@ -180,7 +271,7 @@ Scene::getGroundPointAt(glm::dvec3 point)
     return {};
   }
 
-  intersect->point.z += intersect->prim->getGroundZOffset();
+  intersect->point.z += intersect->geometryRef.groundZOffset();
   return intersect->point;
 }
 
@@ -206,11 +297,13 @@ Scene::getIntersection(std::vector<double> const& tMinMax,
 #endif
     return nullptr;
   }
-  return std::shared_ptr<RaySceneIntersection>(
-    raycaster->search(rayOrigin, rayDir, tMinMax[0], tMinMax[1], groundOnly));
+  std::shared_ptr<RaySceneIntersection> intersection =
+    std::shared_ptr<RaySceneIntersection>(
+      raycaster->search(rayOrigin, rayDir, tMinMax[0], tMinMax[1], groundOnly));
+  return intersection;
 }
 
-std::map<double, Primitive*>
+std::map<double, GeometryRef>
 Scene::getIntersections(glm::dvec3& rayOrigin,
                         glm::dvec3& rayDir,
                         bool const groundOnly)
@@ -235,14 +328,37 @@ Scene::getShift()
 std::vector<Vertex*>
 Scene::getAllVertices()
 {
-  std::unordered_set<Vertex*> vset;
-  for (Primitive* primitive : primitives) {
-    std::size_t const m = primitive->getNumVertices();
-    Vertex* vertices = primitive->getVertices();
-    for (std::size_t i = 0; i < m; ++i)
-      vset.insert(vertices + i);
+  mVertexScratch.clear();
+  for (std::shared_ptr<ScenePart> const& part : parts) {
+    if (part == nullptr) {
+      continue;
+    }
+    for (std::size_t i = 0; i < part->geometryCount(); ++i) {
+      std::size_t const n = part->geometryDynamicVertexCount(i);
+      if (n > 0) {
+        for (std::size_t j = 0; j < n; ++j) {
+          Vertex v;
+          v.pos = part->geometryDynamicVertexPosition(i, j);
+          v.normal = part->geometryDynamicVertexNormal(i, j);
+          mVertexScratch.push_back(v);
+        }
+        continue;
+      }
+      std::shared_ptr<AABB> const box = part->geometryAABB(i);
+      if (box != nullptr) {
+        Vertex v;
+        v.pos = box->getCentroid();
+        mVertexScratch.push_back(v);
+      }
+    }
   }
-  return { vset.begin(), vset.end() };
+
+  std::vector<Vertex*> out;
+  out.reserve(mVertexScratch.size());
+  for (Vertex& v : mVertexScratch) {
+    out.push_back(&v);
+  }
+  return out;
 }
 
 void
@@ -255,9 +371,12 @@ Scene::doForceOnGround()
   std::size_t const m = parts.size(); // How many parts there are in the scene
   for (std::size_t i = 0; i < m; ++i) {
     std::shared_ptr<ScenePart> part = parts[i];
-    if (part->isNull())
+    if (part == nullptr || part->isNull())
       continue;
-    if (!part->mPrimitives[0]->material->isGround)
+    if (part->geometryCount() == 0)
+      continue;
+    std::shared_ptr<Material> partMaterial = part->geometryMaterial(0);
+    if (partMaterial == nullptr || !partMaterial->isGround)
       continue;
     I.push_back(i);              // Store index of found ground part
     planes.push_back(nullptr);   // Null placeholder for best fitting plane
@@ -272,6 +391,9 @@ Scene::doForceOnGround()
 
   // Compute remaining algorithm steps for each on ground scene part
   for (std::shared_ptr<ScenePart>& part : parts) {
+    if (part == nullptr || part->geometryCount() == 0) {
+      continue;
+    }
     if (part->forceOnGround == 0) { // Ignore not on ground scene parts
       std::stringstream ss;
       ss << "Scene::doForceOnGround skipped part \"" << part->mId << "\"\n"
@@ -285,13 +407,16 @@ Scene::doForceOnGround()
       logging::DEBUG(ss.str());
     }
     // 2. Find minimum z vertex and pick first ground reference
-    std::vector<Vertex*> vertices = part->getAllVertices();
-    glm::dvec3 minzv = vertices[0]->pos; // First vertex as minz candidate
+    std::vector<glm::dvec3> const vertices = collectPartDynamicVertices(*part);
+    if (vertices.empty()) {
+      continue;
+    }
+    glm::dvec3 minzv = vertices[0]; // First vertex as minz candidate
     std::size_t const n = vertices.size();
     for (std::size_t i = 1; i < n; ++i) { // Find best minz candidate
-      Vertex* vertex = vertices[i];
-      if (vertex->pos.z < minzv.z)
-        minzv = vertex->pos;
+      glm::dvec3 const& vertex = vertices[i];
+      if (vertex.z < minzv.z)
+        minzv = vertex;
     }
     std::size_t groundLocalIndex;
     std::shared_ptr<ScenePart> groundPart = nullptr; // Ground scene part
@@ -318,12 +443,16 @@ Scene::doForceOnGround()
     }
     // 3. Find ground reference best fitting plane
     if (planes[groundLocalIndex] == nullptr) { // Estimate plane if needed
-      std::vector<Vertex*> groundVertices = groundPart->getAllVertices();
+      std::vector<glm::dvec3> const groundVertices =
+        collectPartDynamicVertices(*groundPart);
+      if (groundVertices.empty()) {
+        continue;
+      }
       std::size_t const ngv = groundVertices.size();
       std::size_t const ngv2 = 2 * ngv;
       arma::mat groundVerticesMatrix(ngv, 3);
       for (std::size_t i = 0; i < ngv; ++i) {
-        glm::dvec3 const& vert = groundVertices[i]->pos;
+        glm::dvec3 const& vert = groundVertices[i];
         groundVerticesMatrix[i] = vert.x;
         groundVerticesMatrix[ngv + i] = vert.y;
         groundVerticesMatrix[ngv2 + i] = vert.z;
@@ -343,32 +472,44 @@ Scene::doForceOnGround()
                            v[0] * q.x - v[1] * q.y) /
                             v[2];
     // 5. Do vertical translation for all vertex of onGround part
-    for (Vertex* vertex : vertices)
-      vertex->pos.z -= zDelta;
+    for (std::size_t i = 0; i < part->geometryCount(); ++i) {
+      std::size_t const nv = part->geometryDynamicVertexCount(i);
+      for (std::size_t j = 0; j < nv; ++j) {
+        glm::dvec3 vertex = part->geometryDynamicVertexPosition(i, j);
+        vertex.z -= zDelta;
+        part->setGeometryDynamicVertexPosition(i, j, vertex);
+      }
+      part->geometryUpdate(i);
+    }
   }
 }
 
 glm::dvec3
 Scene::findForceOnGroundQ(int const searchDepth,
                           glm::dvec3 const minzv,
-                          std::vector<Vertex*>& vertices,
+                          std::vector<glm::dvec3> const& vertices,
                           std::vector<double> const& o,
                           std::vector<double> const& v)
 {
+  if (vertices.empty()) {
+    return minzv;
+  }
   if (searchDepth == -1 || searchDepth > 1) { // Iterative search process for q
     // Compute loop configuration
     std::size_t const maxIters =
       (searchDepth == -1) ? vertices.size()
                           : std::min<std::size_t>(searchDepth, vertices.size());
     std::size_t const stepSize =
-      (searchDepth == -1) ? 1 : (std::size_t)(vertices.size() / maxIters);
+      (searchDepth == -1)
+        ? 1
+        : std::max<std::size_t>(1, vertices.size() / maxIters);
     // Compute the iterative search itself : argmin zDelta
     double const dot = v[0] * o[0] + v[1] * o[1] + v[2] * o[2];
-    glm::dvec3 qBest = vertices[0]->pos;
+    glm::dvec3 qBest = vertices[0];
     double zDeltaBest =
       qBest.z - (dot - v[0] * qBest.x - v[1] * qBest.y) / v[2];
-    for (std::size_t i = stepSize; i < maxIters; i += stepSize) {
-      glm::dvec3 const q = vertices[i]->pos;
+    for (std::size_t i = stepSize; i < vertices.size(); i += stepSize) {
+      glm::dvec3 const& q = vertices[i];
       double const zDelta = q.z - (dot - v[0] * q.x - v[1] * q.y) / v[2];
       if (zDelta < zDeltaBest) {
         zDeltaBest = zDelta;
@@ -421,7 +562,7 @@ Scene::shutdown()
     part->release();
   }
   parts.clear();
-  primitives.clear();
+  clearGeometryRefs();
 }
 
 std::vector<std::shared_ptr<ScenePart>>

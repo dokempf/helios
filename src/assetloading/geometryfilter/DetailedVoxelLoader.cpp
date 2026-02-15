@@ -7,6 +7,9 @@
 #include <boost/filesystem.hpp>
 #include <noise/UniformNoiseSource.h>
 
+#include <algorithm>
+#include <stdexcept>
+
 namespace fs = boost::filesystem;
 
 ScenePart*
@@ -43,7 +46,7 @@ DetailedVoxelLoader::run()
   // Load DV files
   for (std::string const& pathString : filePaths) {
     loadDv(pathString, transmittiveMode);
-    primsOut->subpartLimit.push_back(primsOut->mPrimitives.size());
+    primsOut->subpartLimit.push_back(primsOut->geometryCount());
   }
 
   // Load material if any
@@ -60,6 +63,13 @@ void
 DetailedVoxelLoader::loadDv(std::string const& pathString,
                             bool const discardNullPad)
 {
+  DetailedVoxelScenePart* const detailedPart =
+    dynamic_cast<DetailedVoxelScenePart*>(primsOut);
+  if (detailedPart == nullptr) {
+    throw std::runtime_error(
+      "DetailedVoxelLoader expected DetailedVoxelScenePart output");
+  }
+
   // Check path exists
   fs::path fsPath(pathString);
   if (!fs::exists(pathString)) {
@@ -87,20 +97,87 @@ DetailedVoxelLoader::loadDv(std::string const& pathString,
 
   // Parse detailed voxels
   VoxelFileParser vfp;
-  std::vector<DetailedVoxel*> dvs =
-    vfp.bruteParseDetailed(pathString, 2, false, discardNullPad);
+  std::vector<DetailedVoxelRecord> dvs =
+    vfp.parseDetailedRecords(pathString, 2, false, discardNullPad);
 
-  // Prepare detailed voxels
-  for (DetailedVoxel* dv : dvs) {
-    dv->material = getMaterial(mat.name);
-    for (size_t i = 0; i < dv->getNumVertices(); i++) {
-      Color4f& color = dv->getVertices()[i].color;
-      color.x = 0.5;
-      color.y = 0.5;
-      color.z = 0.5;
-      color.w = 0.5;
+  if (dvs.empty()) {
+    return;
+  }
+
+  std::size_t const oldRows = detailedPart->centers.n_rows;
+  std::size_t const appendCount = dvs.size();
+  std::size_t const newRows = oldRows + appendCount;
+
+  std::size_t intCols = detailedPart->intData.n_cols;
+  std::size_t doubleCols = detailedPart->doubleData.n_cols;
+  for (DetailedVoxelRecord const& dv : dvs) {
+    intCols = std::max(intCols, dv.intValues.size());
+    doubleCols = std::max(doubleCols, dv.doubleValues.size());
+  }
+
+  auto resizeMatPreserve =
+    [](arma::mat& mat, std::size_t rows, std::size_t cols) {
+      arma::mat resized(rows, cols, arma::fill::zeros);
+      if (mat.n_rows > 0 && mat.n_cols > 0) {
+        resized.submat(0, 0, mat.n_rows - 1, mat.n_cols - 1) = mat;
+      }
+      mat = std::move(resized);
+    };
+  auto resizeIntMatPreserve =
+    [](arma::Mat<int>& mat, std::size_t rows, std::size_t cols) {
+      arma::Mat<int> resized(rows, cols, arma::fill::zeros);
+      if (mat.n_rows > 0 && mat.n_cols > 0) {
+        resized.submat(0, 0, mat.n_rows - 1, mat.n_cols - 1) = mat;
+      }
+      mat = std::move(resized);
+    };
+  auto resizeUVecPreserve = [](arma::uvec& vec, std::size_t rows) {
+    arma::uvec resized(rows, arma::fill::zeros);
+    if (vec.n_elem > 0) {
+      resized.subvec(0, vec.n_elem - 1) = vec;
     }
-    primsOut->mPrimitives.push_back(dv);
+    vec = std::move(resized);
+  };
+
+  resizeMatPreserve(detailedPart->centers, newRows, 3);
+  resizeMatPreserve(detailedPart->halfSizes, newRows, 3);
+  resizeMatPreserve(detailedPart->normals, newRows, 3);
+  resizeUVecPreserve(detailedPart->materialIndex, newRows);
+  resizeIntMatPreserve(detailedPart->intData, newRows, intCols);
+  resizeMatPreserve(detailedPart->doubleData, newRows, doubleCols);
+  detailedPart->identifiers.set_size(doubleCols);
+  for (std::size_t i = 0; i < doubleCols; ++i) {
+    detailedPart->identifiers(i) = i;
+  }
+
+  std::shared_ptr<Material> defaultMaterial = getMaterial(mat.name);
+  for (std::size_t localIndex = 0; localIndex < appendCount; ++localIndex) {
+    DetailedVoxelRecord const& dv = dvs[localIndex];
+    std::size_t const row = oldRows + localIndex;
+
+    detailedPart->centers(row, 0) = dv.center.x;
+    detailedPart->centers(row, 1) = dv.center.y;
+    detailedPart->centers(row, 2) = dv.center.z;
+    detailedPart->normals(row, 0) = 0.0;
+    detailedPart->normals(row, 1) = 0.0;
+    detailedPart->normals(row, 2) = 0.0;
+    detailedPart->halfSizes(row, 0) = dv.halfSize;
+    detailedPart->halfSizes(row, 1) = dv.halfSize;
+    detailedPart->halfSizes(row, 2) = dv.halfSize;
+
+    std::size_t const iCols = dv.intValues.size();
+    for (std::size_t col = 0; col < iCols; ++col) {
+      detailedPart->intData(row, col) = dv.intValues[col];
+    }
+    std::size_t const dCols = dv.doubleValues.size();
+    for (std::size_t col = 0; col < dCols; ++col) {
+      detailedPart->doubleData(row, col) = dv.doubleValues[col];
+    }
+    detailedPart->maxPad = std::max(detailedPart->maxPad, dv.maxPad);
+
+    if (defaultMaterial != nullptr) {
+      detailedPart->setGeometryMaterial(row, defaultMaterial);
+    }
   }
 }
 
@@ -113,11 +190,10 @@ DetailedVoxelLoader::loadMaterial()
     return;
 
   // Assign material to each detailed voxel
-  size_t j, n = primsOut->mPrimitives.size(), m = matvec.size();
+  size_t j, n = primsOut->geometryCount(), m = matvec.size();
   for (size_t i = 0; i < n; i++) {
-    DetailedVoxel* dv = (DetailedVoxel*)primsOut->mPrimitives[i];
     j = i % m;
-    dv->material = matvec[j];
+    primsOut->setGeometryMaterial(i, matvec[j]);
   }
 }
 

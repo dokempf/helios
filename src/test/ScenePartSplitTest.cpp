@@ -1,28 +1,30 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <ScenePart.h>
-#include <Triangle.h>
+#include <TriangleScenePart.h>
 
 #include <vector>
 
 TEST_CASE("ScenePart: Split subparts")
 {
-  // Build primitives
-  std::vector<Primitive*> prims;
+  // Build bulk triangle scene part.
+  std::shared_ptr<TriangleScenePart> sp =
+    std::make_shared<TriangleScenePart>(32);
+  sp->vertices.zeros(32, 9);
+  sp->normals.zeros(32, 9);
+  sp->materialIndex.zeros(32);
+  sp->materialTable.push_back(std::make_shared<Material>());
   for (size_t i = 0; i < 32; ++i) {
-    Vertex v0, v1, v2;
-    v0.pos = glm::dvec3(-1.0, -1.0, 0.0);
-    v1.pos = glm::dvec3(0.0, 0.0, ((double)i) / 32.0);
-    v2.pos = glm::dvec3(1.0, 1.0, 0.0);
-    Triangle* tr = new Triangle(v0, v1, v2);
-    prims.push_back(tr);
-  }
-
-  // Build scene part
-  std::shared_ptr<ScenePart> sp = std::make_shared<ScenePart>();
-  for (size_t i = 0; i < 32; ++i) {
-    sp->mPrimitives.push_back(prims[i]);
-    prims[i]->part = sp;
+    sp->vertices(i, 0) = -1.0;
+    sp->vertices(i, 1) = -1.0;
+    sp->vertices(i, 2) = 0.0;
+    sp->vertices(i, 3) = 0.0;
+    sp->vertices(i, 4) = 0.0;
+    sp->vertices(i, 5) = static_cast<double>(i) / 32.0;
+    sp->vertices(i, 6) = 1.0;
+    sp->vertices(i, 7) = 1.0;
+    sp->vertices(i, 8) = 0.0;
+    sp->materialIndex(i) = 0;
     if (i > 0 && (i % 4) == 0)
       sp->subpartLimit.push_back(i);
   }
@@ -30,20 +32,16 @@ TEST_CASE("ScenePart: Split subparts")
   sp->mId = "0";
 
   // Split scene part
-  sp->splitSubparts();
+  std::vector<std::shared_ptr<ScenePart>> splitParts;
+  REQUIRE(sp->splitSubparts(&splitParts));
 
-  // Validate scene part splits
-  for (int i = 0; i < 32; ++i) {
-    int partIdx = std::atoi(prims[i]->part->mId.c_str());
-
-    if (partIdx != i / 4) { // On test failed
-      for (Primitive* prim : prims)
-        delete prim;
-      FAIL();
-    }
+  // Validate scene part splits.
+  REQUIRE(sp->mId == "0");
+  REQUIRE(sp->geometryCount() == 4);
+  REQUIRE(splitParts.size() == 7);
+  for (std::size_t i = 0; i < splitParts.size(); ++i) {
+    REQUIRE(splitParts[i] != nullptr);
+    REQUIRE(splitParts[i]->mId == std::to_string(i + 1));
+    REQUIRE(splitParts[i]->geometryCount() == 4);
   }
-
-  // Delete primitives
-  for (Primitive* prim : prims)
-    delete prim;
 }

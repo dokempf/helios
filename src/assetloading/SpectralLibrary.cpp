@@ -4,10 +4,11 @@
 #include <iostream>
 #include <logging.hpp>
 #include <set>
-#include <typeinfo>
 
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
+
+#include <cmath>
 
 SpectralLibrary::SpectralLibrary(float wavelength_m,
                                  std::vector<std::string> assetsDir,
@@ -114,38 +115,50 @@ void
 SpectralLibrary::setReflectances(Scene* scene)
 {
   std::set<std::string> matsMissing;
+  if (scene == nullptr) {
+    return;
+  }
 
-  for (Primitive* prim : scene->primitives) {
-    if (!isnan(prim->material->reflectance)) {
-      continue; // if a reflectance was set, this has precedence over spectra
-    }
-
-    prim->material->reflectance =
-      defaultReflectance; // otherwise, set the default reflectance
-
-    if (prim->material->spectra.empty()) {
-      if (matsMissing.find(prim->material->spectra) == matsMissing.end()) {
-        matsMissing.insert(prim->material->spectra);
-        logging::WARN("Warning: material " + prim->material->name +
-                      " of primitive " + typeid(*prim).name() + " (" +
-                      prim->material->matFilePath +
-                      ") has no spectral definition");
-      }
+  for (std::shared_ptr<ScenePart> const& part : scene->parts) {
+    if (part == nullptr) {
       continue;
     }
-
-    if (reflectanceMap.find(prim->material->spectra) == reflectanceMap.end()) {
-      if (matsMissing.find(prim->material->spectra) == matsMissing.end()) {
-        matsMissing.insert(prim->material->spectra);
-        logging::WARN("Warning: spectra " + prim->material->spectra + " (" +
-                      prim->material->matFilePath +
-                      ") is not in the spectral library");
+    for (std::size_t i = 0; i < part->geometryCount(); ++i) {
+      std::shared_ptr<Material> material = part->geometryMaterial(i);
+      if (material == nullptr) {
+        continue;
       }
-      continue;
-    }
+      if (!std::isnan(material->reflectance)) {
+        continue; // if reflectance was set, it has precedence over spectra
+      }
 
-    prim->material->reflectance =
-      reflectanceMap.find(prim->material->spectra)->second;
-    prim->material->setSpecularity();
+      // Otherwise, set the default reflectance.
+      material->reflectance = defaultReflectance;
+
+      if (material->spectra.empty()) {
+        if (matsMissing.find(material->spectra) == matsMissing.end()) {
+          matsMissing.insert(material->spectra);
+          logging::WARN("Warning: material " + material->name +
+                        " of scene part " + part->mId + " primitive #" +
+                        std::to_string(i) + " (" + material->matFilePath +
+                        ") has no spectral definition");
+        }
+        continue;
+      }
+
+      auto const reflectanceIt = reflectanceMap.find(material->spectra);
+      if (reflectanceIt == reflectanceMap.end()) {
+        if (matsMissing.find(material->spectra) == matsMissing.end()) {
+          matsMissing.insert(material->spectra);
+          logging::WARN("Warning: spectra " + material->spectra + " (" +
+                        material->matFilePath +
+                        ") is not in the spectral library");
+        }
+        continue;
+      }
+
+      material->reflectance = reflectanceIt->second;
+      material->setSpecularity();
+    }
   }
 }

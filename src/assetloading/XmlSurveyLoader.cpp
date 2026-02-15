@@ -13,6 +13,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/filesystem.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <unordered_set>
@@ -88,11 +89,13 @@ XmlSurveyLoader::createSurveyFromXml(tinyxml2::XMLElement* surveyNode,
     if (sp->sorh == nullptr)
       continue;
     // Update material for each primitive
-    size_t const numPrimitives = sp->mPrimitives.size();
-    std::vector<Primitive*>& baselinePrimitives =
-      sp->sorh->getBaselinePrimitives();
+    size_t const numPrimitives =
+      std::min(sp->geometryCount(), sp->sorh->baselineGeometryCount());
     for (size_t i = 0; i < numPrimitives; ++i) {
-      baselinePrimitives[i]->material = sp->mPrimitives[i]->material;
+      std::shared_ptr<Material> material = sp->geometryMaterial(i);
+      if (material != nullptr) {
+        sp->sorh->setBaselineGeometryMaterial(i, material);
+      }
     }
   }
 

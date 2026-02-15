@@ -5,7 +5,6 @@
 #include <KDTreeRaycaster.h>
 #include <LightKDTreeNode.h>
 #include <RaycasterGroveTree.h>
-#include <adt/custom/PointerVector.h>
 
 /**
  * @author Alberto M. Esmoris Pena
@@ -29,10 +28,9 @@ protected:
 
   // CACHE ATTRIBUTES
   /**
-   * @brief The cache of primitives defining the last state for the root node
-   *  of the raycasting process
+   * @brief Cached primitive refs defining the last tree rebuild state.
    */
-  std::shared_ptr<PointerVector<Primitive>> cache_prims;
+  std::shared_ptr<std::vector<GeometryRef>> cache_refs;
 
 public:
   // ***  CONSTRUCTION / DESTRUCTION  *** //
@@ -44,10 +42,10 @@ public:
   GroveKDTreeRaycaster(
     std::shared_ptr<LightKDTreeNode> root,
     std::shared_ptr<KDTreeFactory> kdtf = nullptr,
-    std::shared_ptr<PointerVector<Primitive>> cache_prims = nullptr)
+    std::shared_ptr<std::vector<GeometryRef>> cache_refs = nullptr)
     : KDTreeRaycaster(root)
     , kdtf(kdtf)
-    , cache_prims(cache_prims)
+    , cache_refs(cache_refs)
   {
   }
   /**
@@ -62,11 +60,11 @@ public:
   /**
    * @see Raycaster::searchAll
    */
-  std::map<double, Primitive*> searchAll(glm::dvec3 rayOrigin,
-                                         glm::dvec3 rayDir,
-                                         double tmin,
-                                         double tmax,
-                                         bool groundOnly) override
+  std::map<double, GeometryRef> searchAll(glm::dvec3 rayOrigin,
+                                          glm::dvec3 rayDir,
+                                          double tmin,
+                                          double tmax,
+                                          bool groundOnly) override
   {
     return KDTreeRaycaster::searchAll(
       rayOrigin, rayDir, tmin, tmax, groundOnly);
@@ -104,13 +102,6 @@ public:
    */
   virtual std::shared_ptr<GroveKDTreeRaycaster> makeTemporalClone() const;
 
-  /**
-   * @brief Generate a shared pointer to a copy of the given vector of
-   *  primitives. Copy implies that primitives are cloned. Thus, deleting
-   *  copied primitives will not delete source primitives.
-   * @param src The source primitives to be copied
-   * @return Shared pointer to a vector of cloned primitives
-   */
-  std::shared_ptr<PointerVector<Primitive>> sharedCopy(
-    std::vector<Primitive*> const& src) const;
+  std::shared_ptr<std::vector<GeometryRef>> sharedCopyRefs(
+    std::vector<GeometryRef> const& src) const;
 };

@@ -53,15 +53,15 @@ public:
   /**
    * @see IVoxelGrid::getVoxel
    */
-  Voxel* getVoxel(std::size_t const key) override;
+  VoxelGridVoxel* getVoxel(std::size_t const key) override;
   /**
    * @see IVoxelGrid::setVoxel
    */
-  Voxel* setVoxel(std::size_t const key,
-                  double const x,
-                  double const y,
-                  double const z,
-                  double halfVoxelSize) override;
+  VoxelGridVoxel* setVoxel(std::size_t const key,
+                           double const x,
+                           double const y,
+                           double const z,
+                           double halfVoxelSize) override;
   /**
    * @see IVoxelGrid::deleteVoxel
    */
@@ -136,5 +136,5 @@ public:
   /**
    * @see IVoxelGrid::whileLoopNext
    */
-  Voxel* whileLoopNext(std::size_t* key = nullptr) override;
+  VoxelGridVoxel* whileLoopNext(std::size_t* key = nullptr) override;
 };

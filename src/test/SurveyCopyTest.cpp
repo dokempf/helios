@@ -8,6 +8,8 @@
 #include <OscillatingMirrorBeamDeflector.h>
 #include <Survey.h>
 #include <scanner/SingleScanner.h>
+#include <scene/sceneparts/DetailedVoxelScenePart.h>
+#include <scene/sceneparts/TriangleScenePart.h>
 
 TEST_CASE("Survey Copy Test")
 {
@@ -51,20 +53,37 @@ TEST_CASE("Survey Copy Test")
   std::shared_ptr<Scene> baseScene = std::make_shared<Scene>();
   survey->scanner->platform->scene = baseScene;
 
-  baseScene->primitives.push_back(new Triangle(Vertex(), Vertex(), Vertex()));
-  baseScene->primitives[0]->part = std::make_shared<ScenePart>();
-  baseScene->primitives[0]->part->mPrimitives.push_back(
-    baseScene->primitives[0]);
-  baseScene->primitives[0]->part->onRayIntersectionMode = "TRANSMITTIVE";
+  std::shared_ptr<TriangleScenePart> triPart =
+    std::make_shared<TriangleScenePart>(1);
+  triPart->vertices.row(0).zeros();
+  triPart->normals.row(0).zeros();
+  triPart->onRayIntersectionMode = "TRANSMITTIVE";
+  baseScene->parts.push_back(triPart);
 
-  baseScene->primitives.push_back(
-    new DetailedVoxel(glm::dvec3(0.0, 0.0, 0.5),
-                      2.15,
-                      std::vector<int>({ 1, 2 }),
-                      std::vector<double>({ 0.1, 0.2, 0.3 })));
-  baseScene->primitives[1]->material = std::make_shared<Material>();
-  baseScene->primitives[1]->material->ka[0] = 1.1;
-  baseScene->primitives[1]->material->ks[1] = 1.2;
+  std::shared_ptr<DetailedVoxelScenePart> dvPart =
+    std::make_shared<DetailedVoxelScenePart>(1);
+  dvPart->centers(0, 0) = 0.0;
+  dvPart->centers(0, 1) = 0.0;
+  dvPart->centers(0, 2) = 0.5;
+  dvPart->halfSizes(0, 0) = 1.075;
+  dvPart->halfSizes(0, 1) = 1.075;
+  dvPart->halfSizes(0, 2) = 1.075;
+  dvPart->intData.set_size(1, 2);
+  dvPart->intData(0, 0) = 1;
+  dvPart->intData(0, 1) = 2;
+  dvPart->doubleData.set_size(1, 3);
+  dvPart->doubleData(0, 0) = 0.1;
+  dvPart->doubleData(0, 1) = 0.2;
+  dvPart->doubleData(0, 2) = 0.3;
+  std::shared_ptr<Material> dvMaterial = std::make_shared<Material>();
+  dvMaterial->ka[0] = 1.1;
+  dvMaterial->ks[1] = 1.2;
+  dvPart->materialIndex.zeros(1);
+  dvPart->setGeometryMaterial(0, dvMaterial);
+  baseScene->parts.push_back(dvPart);
+
+  baseScene->registerParts();
+  baseScene->rebuildGeometryRefs();
 
   // Copy base Survey
   std::shared_ptr<Survey> copy = std::make_shared<Survey>(*survey, true);
@@ -89,11 +108,14 @@ TEST_CASE("Survey Copy Test")
   copy->legs[0]->mPlatformSettings->onGround = true;
 
   std::shared_ptr<Scene> copyScene = copy->scanner->platform->scene;
-  copyScene->primitives[0]->getVertices()[0].pos.x += 0.1;
-  copyScene->primitives[0]->part->onRayIntersectionArgument += 0.034;
-  copyScene->primitives[1]->material->ks[1] += 0.1;
-  DetailedVoxel* copyDv = (DetailedVoxel*)copyScene->primitives[1];
-  (*copyDv)[1] += 0.1;
+  std::shared_ptr<TriangleScenePart> copyTriPart =
+    std::dynamic_pointer_cast<TriangleScenePart>(copyScene->parts[0]);
+  std::shared_ptr<DetailedVoxelScenePart> copyDvPart =
+    std::dynamic_pointer_cast<DetailedVoxelScenePart>(copyScene->parts[1]);
+  copyTriPart->vertices(0, 0) += 0.1;
+  copyTriPart->onRayIntersectionArgument += 0.034;
+  copyDvPart->geometryMaterial(0)->ks[1] += 0.1;
+  copyDvPart->doubleData(0, 1) += 0.1;
 
   // Validate the copy
   REQUIRE(copy->name != survey->name);
@@ -144,18 +166,19 @@ TEST_CASE("Survey Copy Test")
   REQUIRE(copy->legs[0]->mPlatformSettings->stopAndTurn ==
           survey->legs[0]->mPlatformSettings->stopAndTurn);
 
-  REQUIRE(copyScene->primitives[0]->getVertices()[0].pos.x !=
-          baseScene->primitives[0]->getVertices()[0].pos.x);
-  REQUIRE(copyScene->primitives[0]->getVertices()[0].pos.y ==
-          baseScene->primitives[0]->getVertices()[0].pos.y);
-  REQUIRE(copyScene->primitives[0]->part->onRayIntersectionArgument !=
-          baseScene->primitives[0]->part->onRayIntersectionArgument);
-  REQUIRE(copyScene->primitives[1]->material->ks[0] ==
-          baseScene->primitives[1]->material->ks[0]);
-  REQUIRE(copyScene->primitives[1]->material->ks[1] !=
-          baseScene->primitives[1]->material->ks[1]);
+  std::shared_ptr<TriangleScenePart> baseTriPart =
+    std::dynamic_pointer_cast<TriangleScenePart>(baseScene->parts[0]);
+  std::shared_ptr<DetailedVoxelScenePart> baseDvPart =
+    std::dynamic_pointer_cast<DetailedVoxelScenePart>(baseScene->parts[1]);
 
-  DetailedVoxel* baseDv = (DetailedVoxel*)baseScene->primitives[1];
-  REQUIRE((*copyDv)[1] != (*baseDv)[1]);
-  REQUIRE((*copyDv)[0] == (*baseDv)[0]);
+  REQUIRE(copyTriPart->vertices(0, 0) != baseTriPart->vertices(0, 0));
+  REQUIRE(copyTriPart->vertices(0, 1) == baseTriPart->vertices(0, 1));
+  REQUIRE(copyTriPart->onRayIntersectionArgument !=
+          baseTriPart->onRayIntersectionArgument);
+  REQUIRE(copyDvPart->geometryMaterial(0)->ks[0] ==
+          baseDvPart->geometryMaterial(0)->ks[0]);
+  REQUIRE(copyDvPart->geometryMaterial(0)->ks[1] !=
+          baseDvPart->geometryMaterial(0)->ks[1]);
+  REQUIRE(copyDvPart->doubleData(0, 1) != baseDvPart->doubleData(0, 1));
+  REQUIRE(copyDvPart->doubleData(0, 0) == baseDvPart->doubleData(0, 0));
 }

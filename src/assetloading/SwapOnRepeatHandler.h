@@ -1,8 +1,8 @@
 #pragma once
 
-class Primitive;
 class ScenePart;
 class AbstractGeometryFilter;
+class Material;
 
 #include <deque>
 #include <memory>
@@ -51,7 +51,7 @@ protected:
    */
   bool discardOnReplay;
   /**
-   * @brief Whether all the vertices defining each primitive must be
+   * @brief Whether all the vertices defining each geometry element must be
    *  considered as a whole.
    */
   bool holistic;
@@ -77,7 +77,7 @@ public:
   /**
    * @brief The baseline scene part before applying any transformation.
    */
-  std::unique_ptr<ScenePart> baseline;
+  std::shared_ptr<ScenePart> baseline;
 
   // ***  CONSTRUCTION / DESTRUCTION  *** //
   // ************************************ //
@@ -201,13 +201,25 @@ public:
    */
   void pushTimeToLive(int const timeToLive);
   /**
-   * @brief Obtain a vector of pointers to the primitives representing the
-   *  baseline of the handler.
-   * @return Vector of pointers to the primitives representing the handler's
-   *  baseline.
-   * @see SwapOnRepeatHandler::mPrimitives
+   * @brief Obtain the number of baseline geometry elements.
+   * @return Number of baseline geometry elements.
    */
-  std::vector<Primitive*>& getBaselinePrimitives();
+  std::size_t baselineGeometryCount() const;
+  /**
+   * @brief Update baseline geometry material by index.
+   * @param index Geometry index in baseline.
+   * @param material Material to assign.
+   */
+  void setBaselineGeometryMaterial(std::size_t index,
+                                   std::shared_ptr<Material> material);
+  /**
+   * @brief Delete all baseline geometry and clear baseline storage.
+   */
+  void releaseBaselineGeometries();
+  /**
+   * @brief Clear baseline geometry storage without deleting.
+   */
+  void clearBaselineGeometryStorage();
   /**
    * @brief Set the keepCRS flag.
    * @param keepCRS The new keepCRS flag for the handler.

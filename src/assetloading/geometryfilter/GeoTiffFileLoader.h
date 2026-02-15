@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AbstractGeometryFilter.h"
+#include <TriangleScenePart.h>
 #include <gdal_priv.h>
 #include <ogr_spatialref.h>
 
@@ -84,7 +85,7 @@ public:
    * @see AbstractGeometryFilter::AbstractGeometryFilter(ScenePart*)
    */
   GeoTiffFileLoader()
-    : AbstractGeometryFilter(new ScenePart())
+    : AbstractGeometryFilter(new TriangleScenePart())
   {
   }
 
