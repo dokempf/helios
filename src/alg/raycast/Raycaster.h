@@ -1,5 +1,6 @@
 #pragma once
 
+#include <GeometryRef.h>
 #include <RaySceneIntersection.h>
 
 #include <glm/glm.hpp>
@@ -36,11 +37,11 @@ public:
    * @return Return map of collected primitives, each identified by its
    *  distance with respect to ray origin
    */
-  virtual std::map<double, Primitive*> searchAll(glm::dvec3 rayOrigin,
-                                                 glm::dvec3 rayDir,
-                                                 double tmin,
-                                                 double tmax,
-                                                 bool groundOnly) = 0;
+  virtual std::map<double, GeometryRef> searchAll(glm::dvec3 rayOrigin,
+                                                  glm::dvec3 rayDir,
+                                                  double tmin,
+                                                  double tmax,
+                                                  bool groundOnly) = 0;
   /**
    * @brief Search first intersection for specified ray
    * @param rayOrigin Ray origin 3D coordinates

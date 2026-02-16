@@ -1,7 +1,7 @@
 #pragma once
 
 #include "AbstractGeometryFilter.h"
-#include "Voxel.h"
+#include <VoxelScenePart.h>
 #include <assetloading/geometryfilter/IVoxelGrid.h>
 
 #include <armadillo>
@@ -330,7 +330,7 @@ public:
    * @see AbstractGeometryFilter::AbstractGeometryFilter(ScenePart*)
    */
   explicit XYZPointCloudFileLoader()
-    : AbstractGeometryFilter(new ScenePart())
+    : AbstractGeometryFilter(new VoxelScenePart())
   {
   }
   virtual ~XYZPointCloudFileLoader() = default;

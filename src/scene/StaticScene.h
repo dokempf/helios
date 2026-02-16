@@ -84,6 +84,16 @@ public:
    */
   inline void appendStaticObject(std::shared_ptr<ScenePart> obj)
   {
+    bool alreadyRegistered = false;
+    for (std::shared_ptr<ScenePart> const& part : parts) {
+      if (part == obj) {
+        alreadyRegistered = true;
+        break;
+      }
+    }
+    if (!alreadyRegistered) {
+      parts.push_back(obj);
+    }
     staticObjs.push_back(obj);
   }
   /**

@@ -1,12 +1,27 @@
 #pragma once
 
-#include <DetailedVoxel.h>
 #include <HeliosException.h>
 #include <fstream>
+#include <glm/glm.hpp>
 #include <iostream>
 #include <logging.hpp>
+#include <memory>
+#include <optional>
 #include <string>
 #include <vector>
+
+/**
+ * @brief Parsed detailed voxel record independent from legacy primitive
+ * classes.
+ */
+struct DetailedVoxelRecord
+{
+  glm::dvec3 center = glm::dvec3(0.0);
+  double halfSize = 0.0;
+  std::vector<int> intValues;
+  std::vector<double> doubleValues;
+  double maxPad = 0.0;
+};
 
 /**
  * @author Alberto M. Esmoris Pena
@@ -45,41 +60,9 @@ public:
   // ***  P A R S E  *** //
   // ******************* //
   /**
-   * @brief Parse detailed voxels specified at file located at
-   * given path
-   * @param path Where the detailed voxels specification file
-   * is located
-   * @param numHeaderLines Specify how many header lines are used at
-   * given file. Comments and blank lines must not be considered for this
-   * count.
-   * @param exactFormat When true it is assumed that only standard parameters
-   * should be considering for each voxel. Using this knowledge parsing
-   * process can be accelerated.
-   * @param discardNullPad When true, those voxels with a PadBvTotal of 0
-   *  will be discarded (by default they are preserved)
-   * @param separator The separator between different fields
-   *
-   * For instance, if 1st line is a header line, 2nd line is a comment line,
-   * 3rd line is a header line and from 4th line all lines are content;
-   * number of header lines should be specified as 2
-   *
-   *
-   * @return Parsed detailed voxels
+   * @brief Parse detailed-voxel records directly as bulk data.
    */
-  std::vector<std::shared_ptr<DetailedVoxel>> parseDetailed(
-    std::string const& path,
-    size_t numHeaderLines = 2,
-    bool const exactFormat = true,
-    bool const discardNullPad = false,
-    std::string const separator = " ");
-
-  /**
-   * @brief Like parseDetailed but returns a vector a normla pointers instead
-   * of shared pointers
-   * @see parseDetailed(
-   *  std::string const &, size_t, bool const, std::string const)
-   */
-  std::vector<DetailedVoxel*> bruteParseDetailed(
+  std::vector<DetailedVoxelRecord> parseDetailedRecords(
     std::string const& path,
     size_t numHeaderLines = 2,
     bool const exactFormat = true,
@@ -288,23 +271,23 @@ protected:
    * voxel coordinates can be computed
    * @param format2 Format string to parse expected doubles
    * @param format3 Format string to parse extra values (doubles)
-   * @return Parsed DetailedVoxel (nullptr if it was discarded, for instance
-   *  to ignore transmittive voxels with PadBVTotal==0)
+   * @return Parsed DetailedVoxel record, std::nullopt if it was discarded
    */
-  DetailedVoxel* parseDetailedVoxelLine(std::string& line,
-                                        std::string const separator,
-                                        bool const exactFormat,
-                                        bool const discardNullPad,
-                                        char const* format1,
-                                        char const* format2,
-                                        char const* format3,
-                                        double minCornerX,
-                                        double minCornerY,
-                                        double minCornerZ,
-                                        double maxCornerX,
-                                        double maxCornerY,
-                                        double maxCornerZ,
-                                        double voxelSize,
-                                        double voxelHalfSize,
-                                        double maxPad);
+  std::optional<DetailedVoxelRecord> parseDetailedVoxelLine(
+    std::string& line,
+    std::string const separator,
+    bool const exactFormat,
+    bool const discardNullPad,
+    char const* format1,
+    char const* format2,
+    char const* format3,
+    double minCornerX,
+    double minCornerY,
+    double minCornerZ,
+    double maxCornerX,
+    double maxCornerY,
+    double maxCornerZ,
+    double voxelSize,
+    double voxelHalfSize,
+    double maxPad);
 };

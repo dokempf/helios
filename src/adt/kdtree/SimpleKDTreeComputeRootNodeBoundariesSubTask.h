@@ -1,6 +1,6 @@
 #pragma once
 
-#include <Primitive.h>
+#include <GeometryRef.h>
 #include <SharedSubTask.h>
 #include <SharedTaskSequencer.h>
 
@@ -25,7 +25,7 @@ protected:
   /**
    * @brief Vector of primitives inside given root node
    */
-  std::vector<Primitive*> const& primitives;
+  std::vector<GeometryRef> const& primitives;
   /**
    * @brief Index of primitive (inclusive) at which the sub-task must start
    *  to iterate
@@ -64,7 +64,7 @@ protected:
    * @brief Function to digest a primitive when computing boundaries for
    *  root node
    */
-  std::function<void(Primitive* primitive,
+  std::function<void(GeometryRef const& primitive,
                      double& ax,
                      double& ay,
                      double& az,
@@ -82,7 +82,7 @@ public:
    */
   SimpleKDTreeComputeRootNodeBoundariesSubTask(
     std::shared_ptr<SharedTaskSequencer> ch,
-    std::vector<Primitive*> const& primitives,
+    std::vector<GeometryRef> const& primitives,
     std::size_t const startPrimitive,
     std::size_t const endPrimitive,
     double& ax,
@@ -91,7 +91,7 @@ public:
     double& bx,
     double& by,
     double& bz,
-    std::function<void(Primitive* primitive,
+    std::function<void(GeometryRef const& primitive,
                        double& ax,
                        double& ay,
                        double& az,

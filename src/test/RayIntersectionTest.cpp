@@ -1,58 +1,93 @@
 #include <catch2/catch_test_macros.hpp>
 
-#include <DetailedVoxel.h>
+#include <DetailedVoxelScenePart.h>
+#include <IntersectionHandlingResult.h>
 #include <UniformNoiseSource.h>
 #include <maths/RayUtils.h>
 
+#include <memory>
+#include <vector>
+
+namespace {
 static bool
 checkIntersection(const std::vector<double>& it)
 {
-  if (it.empty())
+  if (it.empty()) {
     return false;
-  if (it[0] < 0.0 && it[1] < 0.0)
+  }
+  if (it[0] < 0.0 && it[1] < 0.0) {
     return false;
+  }
   return true;
+}
+
+static DetailedVoxelScenePart
+makeDetailedVoxel(glm::dvec3 const& center,
+                  double const halfSize,
+                  std::vector<int> intValues,
+                  std::vector<double> doubleValues)
+{
+  DetailedVoxelScenePart dv(1);
+  dv.centers.zeros(1, 3);
+  dv.halfSizes.zeros(1, 3);
+  dv.normals.zeros(1, 3);
+  dv.intData.zeros(1, intValues.size());
+  dv.doubleData.zeros(1, doubleValues.size());
+  dv.identifiers.zeros(doubleValues.size());
+  dv.materialIndex.zeros(1);
+
+  dv.centers(0, 0) = center.x;
+  dv.centers(0, 1) = center.y;
+  dv.centers(0, 2) = center.z;
+  dv.halfSizes(0, 0) = halfSize;
+  dv.halfSizes(0, 1) = halfSize;
+  dv.halfSizes(0, 2) = halfSize;
+  for (std::size_t i = 0; i < intValues.size(); ++i) {
+    dv.intData(0, i) = intValues[i];
+  }
+  for (std::size_t i = 0; i < doubleValues.size(); ++i) {
+    dv.doubleData(0, i) = doubleValues[i];
+    dv.identifiers(i) = i;
+  }
+  return dv;
+}
 }
 
 TEST_CASE("RayIntersection: Intersection and handling")
 {
-  // Create voxels
-  DetailedVoxel dv1(6,
-                    6,
-                    6,
-                    2,
-                    std::vector<int>({ 0, 49 }),
-                    std::vector<double>({ 0,
-                                          89.7859174,
-                                          0.0222306,
-                                          0,
-                                          0.1843913,
-                                          0.1244739,
-                                          0.0644808,
-                                          3.1595603,
-                                          1,
-                                          0,
-                                          0 }));
-  dv1.part = std::make_shared<ScenePart>();
-  dv1.part->onRayIntersectionMode = "TRANSMITTIVE";
-  DetailedVoxel dv2(6,
-                    6,
-                    -2,
-                    2,
-                    std::vector<int>({ 0, 120 }),
-                    std::vector<double>({ 0,
-                                          89.9096456,
-                                          0.061645,
-                                          0,
-                                          0.1772976,
-                                          0.3734215,
-                                          0.124348,
-                                          14.9217589,
-                                          1,
-                                          0,
-                                          0 }));
-  dv2.part = std::make_shared<ScenePart>();
-  dv2.part->onRayIntersectionMode = "TRANSMITTIVE";
+  DetailedVoxelScenePart dv1 =
+    makeDetailedVoxel(glm::dvec3(6, 6, 6),
+                      2.0,
+                      std::vector<int>({ 0, 49 }),
+                      std::vector<double>({ 0,
+                                            89.7859174,
+                                            0.0222306,
+                                            0,
+                                            0.1843913,
+                                            0.1244739,
+                                            0.0644808,
+                                            3.1595603,
+                                            1,
+                                            0,
+                                            0 }));
+  dv1.onRayIntersectionMode = "TRANSMITTIVE";
+
+  DetailedVoxelScenePart dv2 =
+    makeDetailedVoxel(glm::dvec3(6, 6, -2),
+                      2.0,
+                      std::vector<int>({ 0, 120 }),
+                      std::vector<double>({ 0,
+                                            89.9096456,
+                                            0.061645,
+                                            0,
+                                            0.1772976,
+                                            0.3734215,
+                                            0.124348,
+                                            14.9217589,
+                                            1,
+                                            0,
+                                            0 }));
+  dv2.onRayIntersectionMode = "TRANSMITTIVE";
 
   // Create rays (o := originWaypoint , v := normalized director vector)
   glm::dvec3 o1(6, 6, 9);                            // Ray 1 originWaypoint
@@ -71,27 +106,20 @@ TEST_CASE("RayIntersection: Intersection and handling")
   glm::dvec3 v7(0.40824829, 0.81649658, 0.40824829); // Ray 7 direction
 
   // Validate simple intersections are as expected
-  REQUIRE(checkIntersection(dv1.getRayIntersection(o1, v1))); // r1 must hit dv1
-  REQUIRE(checkIntersection(dv1.getRayIntersection(o2, v2))); // r2 must hit dv1
-  REQUIRE_FALSE(
-    checkIntersection(dv1.getRayIntersection(o3, v3))); // r3 must NOT hit dv1
-  REQUIRE(checkIntersection(dv1.getRayIntersection(o4, v4))); // r4 must hit dv1
-  REQUIRE_FALSE(
-    checkIntersection(dv1.getRayIntersection(o5, v5))); // r5 must NOT hit dv1
-  REQUIRE_FALSE(
-    checkIntersection(dv1.getRayIntersection(o6, v6))); // r6 must NOT hit dv1
-  REQUIRE(checkIntersection(dv1.getRayIntersection(o7, v7))); // r7 must hit dv1
-  REQUIRE(checkIntersection(dv2.getRayIntersection(o1, v1))); // r1 must hit dv2
-  REQUIRE_FALSE(
-    checkIntersection(dv2.getRayIntersection(o2, v2))); // r2 must NOT hit dv2
-  REQUIRE(checkIntersection(dv2.getRayIntersection(o3, v3))); // r3 must hit dv2
-  REQUIRE(checkIntersection(dv2.getRayIntersection(o4, v4))); // r4 must hit dv2
-  REQUIRE_FALSE(
-    checkIntersection(dv2.getRayIntersection(o5, v5))); // r5 must NOT hit dv2
-  REQUIRE_FALSE(
-    checkIntersection(dv2.getRayIntersection(o6, v6))); // r6 must NOT hit dv2
-  REQUIRE_FALSE(
-    checkIntersection(dv2.getRayIntersection(o7, v7))); // r7 must NOT hit dv2
+  REQUIRE(checkIntersection(dv1.geometryRayIntersection(0, o1, v1)));
+  REQUIRE(checkIntersection(dv1.geometryRayIntersection(0, o2, v2)));
+  REQUIRE_FALSE(checkIntersection(dv1.geometryRayIntersection(0, o3, v3)));
+  REQUIRE(checkIntersection(dv1.geometryRayIntersection(0, o4, v4)));
+  REQUIRE_FALSE(checkIntersection(dv1.geometryRayIntersection(0, o5, v5)));
+  REQUIRE_FALSE(checkIntersection(dv1.geometryRayIntersection(0, o6, v6)));
+  REQUIRE(checkIntersection(dv1.geometryRayIntersection(0, o7, v7)));
+  REQUIRE(checkIntersection(dv2.geometryRayIntersection(0, o1, v1)));
+  REQUIRE_FALSE(checkIntersection(dv2.geometryRayIntersection(0, o2, v2)));
+  REQUIRE(checkIntersection(dv2.geometryRayIntersection(0, o3, v3)));
+  REQUIRE(checkIntersection(dv2.geometryRayIntersection(0, o4, v4)));
+  REQUIRE_FALSE(checkIntersection(dv2.geometryRayIntersection(0, o5, v5)));
+  REQUIRE_FALSE(checkIntersection(dv2.geometryRayIntersection(0, o6, v6)));
+  REQUIRE_FALSE(checkIntersection(dv2.geometryRayIntersection(0, o7, v7)));
 
   // Prepare semitransparent voxel test
   UniformNoiseSource<double> uns("1", 0.0, 1.0);
@@ -102,28 +130,29 @@ TEST_CASE("RayIntersection: Intersection and handling")
 
   // Semitransparent voxel test for ray1
   so = o1;
-  std::vector<double> it = dv1.getRayIntersection(so, v1);
+  std::vector<double> it = dv1.geometryRayIntersection(0, so, v1);
   glm::dvec3 iip(so + it[0] * v1); // Inside Intersection Point
-  glm::dvec3 oip =
-    RayUtils::obtainPointAfterTraversing(*dv1.getAABB(), so, v1, 0.0);
+  std::shared_ptr<AABB> dv1Aabb = dv1.geometryAABB(0);
+  glm::dvec3 oip = RayUtils::obtainPointAfterTraversing(*dv1Aabb, so, v1, 0.0);
   double ints = 0.0;
   IntersectionHandlingResult ihr =
-    dv1.onRayIntersection(uns, v1, iip, oip, ints);
+    dv1.geometryOnRayIntersection(0, uns, v1, iip, oip, ints);
   REQUIRE(ihr.canRayContinue()); // Ray must be able to continue
 
   so = oip + 0.00001 * v1;
-  it = dv2.getRayIntersection(so, v1);
+  it = dv2.geometryRayIntersection(0, so, v1);
   iip = glm::dvec3(so + it[0] * v1);
-  oip = RayUtils::obtainPointAfterTraversing(*dv2.getAABB(), so, v1, 0.0);
-  ihr = dv2.onRayIntersection(uns, v1, iip, oip, ints);
+  std::shared_ptr<AABB> dv2Aabb = dv2.geometryAABB(0);
+  oip = RayUtils::obtainPointAfterTraversing(*dv2Aabb, so, v1, 0.0);
+  ihr = dv2.geometryOnRayIntersection(0, uns, v1, iip, oip, ints);
   REQUIRE(ihr.canRayContinue()); // Ray must be able to continue
 
   // Semitransparent voxel test for ray2
   so = o2;
-  it = dv1.getRayIntersection(so, v2);
+  it = dv1.geometryRayIntersection(0, so, v2);
   iip = glm::dvec3(so + it[0] * v2);
-  oip = RayUtils::obtainPointAfterTraversing(*dv1.getAABB(), so, v2, 0.0);
-  ihr = dv1.onRayIntersection(uns, v2, iip, oip, ints);
+  oip = RayUtils::obtainPointAfterTraversing(*dv1Aabb, so, v2, 0.0);
+  ihr = dv1.geometryOnRayIntersection(0, uns, v2, iip, oip, ints);
   REQUIRE(ihr.canRayContinue()); // Ray must be able to continue
 
   // Semitransparent voxel test for ray3
@@ -132,10 +161,10 @@ TEST_CASE("RayIntersection: Intersection and handling")
   It is skipped in the original code due to an early return
   */
   so = o3;
-  it = dv2.getRayIntersection(so, v3);
+  it = dv2.geometryRayIntersection(0, so, v3);
   iip = glm::dvec3(so + it[0] * v3);
-  oip = RayUtils::obtainPointAfterTraversing(*dv2.getAABB(), so, v3, 0.0);
-  ihr = dv2.onRayIntersection(uns, v3, iip, oip, ints);
+  oip = RayUtils::obtainPointAfterTraversing(*dv2Aabb, so, v3, 0.0);
+  ihr = dv2.geometryOnRayIntersection(0, uns, v3, iip, oip, ints);
   // REQUIRE_FALSE(ihr.canRayContinue()); // Ray must NOT be able to continue
 
   // Semitransparent voxel test for ray4
@@ -144,24 +173,24 @@ TEST_CASE("RayIntersection: Intersection and handling")
   It is skipped in the original code due to an early return
   */
   so = o4;
-  it = dv2.getRayIntersection(so, v4);
+  it = dv2.geometryRayIntersection(0, so, v4);
   iip = glm::dvec3(so + it[0] * v4);
-  oip = RayUtils::obtainPointAfterTraversing(*dv2.getAABB(), so, v4, 0.0);
-  ihr = dv2.onRayIntersection(uns, v4, iip, oip, ints);
+  oip = RayUtils::obtainPointAfterTraversing(*dv2Aabb, so, v4, 0.0);
+  ihr = dv2.geometryOnRayIntersection(0, uns, v4, iip, oip, ints);
   // REQUIRE_FALSE(ihr.canRayContinue()); // Ray must NOT be able to continue
 
   so = oip + 0.00001 * v4;
-  it = dv1.getRayIntersection(so, v4);
+  it = dv1.geometryRayIntersection(0, so, v4);
   iip = glm::dvec3(so + it[0] * v4);
-  oip = RayUtils::obtainPointAfterTraversing(*dv1.getAABB(), so, v4, 0.0);
-  ihr = dv1.onRayIntersection(uns, v4, iip, oip, ints);
+  oip = RayUtils::obtainPointAfterTraversing(*dv1Aabb, so, v4, 0.0);
+  ihr = dv1.geometryOnRayIntersection(0, uns, v4, iip, oip, ints);
   REQUIRE(ihr.canRayContinue()); // Ray must be able to continue
 
   // Semitransparent voxel test for ray7
   so = o7;
-  it = dv1.getRayIntersection(so, v7);
+  it = dv1.geometryRayIntersection(0, so, v7);
   iip = glm::dvec3(so + it[0] * v7);
-  oip = RayUtils::obtainPointAfterTraversing(*dv1.getAABB(), so, v7, 0.0);
-  ihr = dv1.onRayIntersection(uns, v7, iip, oip, ints);
+  oip = RayUtils::obtainPointAfterTraversing(*dv1Aabb, so, v7, 0.0);
+  ihr = dv1.geometryOnRayIntersection(0, uns, v7, iip, oip, ints);
   REQUIRE(ihr.canRayContinue()); // Ray must be able to continue
 }

@@ -25,13 +25,13 @@ DenseVoxelGrid::hasVoxel(std::size_t const key)
   return voxels[key].voxel != nullptr;
 }
 
-Voxel*
+VoxelGridVoxel*
 DenseVoxelGrid::getVoxel(std::size_t const key)
 {
   return voxels[key].voxel;
 }
 
-Voxel*
+VoxelGridVoxel*
 DenseVoxelGrid::setVoxel(std::size_t const key,
                          double const x,
                          double const y,
@@ -39,14 +39,17 @@ DenseVoxelGrid::setVoxel(std::size_t const key,
                          double halfVoxelSize)
 {
   VoxelGridCell& vgc = voxels[key];
-  vgc.voxel = new Voxel(x, y, z, halfVoxelSize);
+  delete vgc.voxel;
+  vgc.voxel = new VoxelGridVoxel();
+  vgc.voxel->center = glm::dvec3(x, y, z);
+  vgc.voxel->halfSize = halfVoxelSize;
   return vgc.voxel;
 }
 
 void
 DenseVoxelGrid::deleteVoxel(std::size_t const key)
 {
-  Voxel* voxel = voxels[key].voxel;
+  VoxelGridVoxel* voxel = voxels[key].voxel;
   if (voxel == nullptr)
     return;
   delete voxel;
@@ -154,11 +157,11 @@ DenseVoxelGrid::whileLoopHasNext()
   return whileLoopIter < maxNVoxels;
 }
 
-Voxel*
+VoxelGridVoxel*
 DenseVoxelGrid::whileLoopNext(size_t* key)
 {
   // Obtain current voxel
-  Voxel* voxel = voxels[whileLoopIter].voxel;
+  VoxelGridVoxel* voxel = voxels[whileLoopIter].voxel;
   // Obtain the matrix, if requested
   if (key != nullptr)
     *key = whileLoopIter;

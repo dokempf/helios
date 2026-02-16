@@ -1,7 +1,6 @@
 #pragma once
 
 #include <KDGrove.h>
-#include <Primitive.h>
 #include <Raycaster.h>
 
 #include <glm/glm.hpp>
@@ -44,11 +43,11 @@ public:
   /**
    * @see Raycaster::searchAll
    */
-  std::map<double, Primitive*> searchAll(glm::dvec3 rayOrigin,
-                                         glm::dvec3 rayDir,
-                                         double tmin,
-                                         double tmax,
-                                         bool groundOnly) override;
+  std::map<double, GeometryRef> searchAll(glm::dvec3 rayOrigin,
+                                          glm::dvec3 rayDir,
+                                          double tmin,
+                                          double tmax,
+                                          bool groundOnly) override;
   /**
    * @see Raycaster::search
    */

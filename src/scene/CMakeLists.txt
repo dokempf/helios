@@ -4,6 +4,7 @@ target_include_directories(
   "."
   "primitives"
   "dynamic"
+  "sceneparts"
 )
 
 target_sources(
@@ -13,12 +14,8 @@ target_sources(
   "Material.cpp"
   "StaticScene.cpp"
   "Scene.cpp"
-  "primitives/Primitive.cpp"
-  "primitives/DetailedVoxel.cpp"
-  "primitives/Voxel.cpp"
   "primitives/Vertex.cpp"
   "primitives/AABB.cpp"
-  "primitives/Triangle.cpp"
   "IntersectionHandlingResult.cpp"
   "dynamic/DynMotionEngine.cpp"
   "dynamic/DynScene.cpp"
@@ -26,4 +23,7 @@ target_sources(
   "dynamic/DynSequentiableMovingObject.cpp"
   "dynamic/DynMovingObject.cpp"
   "dynamic/DynMotion.cpp"
+  "sceneparts/TriangleScenePart.cpp"
+  "sceneparts/VoxelScenePart.cpp"
+  "sceneparts/DetailedVoxelScenePart.cpp"
 )

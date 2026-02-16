@@ -257,6 +257,18 @@ public:
    */
   inline void appendDynObject(std::shared_ptr<DynObject> dynobj)
   {
+    std::shared_ptr<ScenePart> dynPart =
+      std::static_pointer_cast<ScenePart>(dynobj);
+    bool alreadyRegistered = false;
+    for (std::shared_ptr<ScenePart> const& part : parts) {
+      if (part == dynPart) {
+        alreadyRegistered = true;
+        break;
+      }
+    }
+    if (!alreadyRegistered) {
+      parts.push_back(dynPart);
+    }
     dynObjs.push_back(dynobj);
     updated.push_back(true);
   }

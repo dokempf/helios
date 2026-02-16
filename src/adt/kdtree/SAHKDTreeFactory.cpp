@@ -18,7 +18,7 @@ SAHKDTreeFactory::SAHKDTreeFactory(std::size_t const lossNodes,
    */
   _buildRecursive = [&](KDTreeNode* parent,
                         bool const left,
-                        std::vector<Primitive*>& primitives,
+                        std::vector<GeometryRef>& primitives,
                         int const depth,
                         int const index) -> KDTreeNode* {
     return this->buildRecursive(parent, left, primitives, depth, index);
@@ -55,7 +55,7 @@ SAHKDTreeFactory::_clone(KDTreeFactory* _kdtf) const
 void
 SAHKDTreeFactory::defineSplit(KDTreeNode* node,
                               KDTreeNode* parent,
-                              std::vector<Primitive*>& primitives,
+                              std::vector<GeometryRef>& primitives,
                               int const depth) const
 {
   // Find split axis
@@ -93,11 +93,11 @@ SAHKDTreeFactory::computeKDTreeStats(KDTreeNodeRoot* root) const
 void
 SAHKDTreeFactory::buildChildrenNodes(KDTreeNode* node,
                                      KDTreeNode* parent,
-                                     std::vector<Primitive*> const& primitives,
+                                     std::vector<GeometryRef> const& primitives,
                                      int const depth,
                                      int const index,
-                                     std::vector<Primitive*>& leftPrimitives,
-                                     std::vector<Primitive*>& rightPrimitives)
+                                     std::vector<GeometryRef>& leftPrimitives,
+                                     std::vector<GeometryRef>& rightPrimitives)
 {
   // Call recipe to build children nodes
   buildChildrenNodesRecipe(
@@ -111,8 +111,8 @@ SAHKDTreeFactory::buildChildrenNodes(KDTreeNode* node,
     [&](KDTreeNode* node,
         int const depth,
         int const index,
-        std::vector<Primitive*>& leftPrimitives,
-        std::vector<Primitive*>& rightPrimitives) -> void {
+        std::vector<GeometryRef>& leftPrimitives,
+        std::vector<GeometryRef>& rightPrimitives) -> void {
       if (!leftPrimitives.empty()) { // Build left child
         setChild(
           node->left,
@@ -130,16 +130,16 @@ void
 SAHKDTreeFactory::buildChildrenNodesRecipe(
   KDTreeNode* node,
   KDTreeNode* parent,
-  std::vector<Primitive*> const& primitives,
+  std::vector<GeometryRef> const& primitives,
   int const depth,
   int const index,
-  std::vector<Primitive*>& leftPrimitives,
-  std::vector<Primitive*>& rightPrimitives,
+  std::vector<GeometryRef>& leftPrimitives,
+  std::vector<GeometryRef>& rightPrimitives,
   std::function<void(KDTreeNode* node,
                      int const depth,
                      int const index,
-                     std::vector<Primitive*>& leftPrimitives,
-                     std::vector<Primitive*>& rightPrimitives)>
+                     std::vector<GeometryRef>& leftPrimitives,
+                     std::vector<GeometryRef>& rightPrimitives)>
     f_buildChildrenNodes)
 {
   if (parent == nullptr) {      // Compute parent heuristic (INIT ILOT)
@@ -173,9 +173,9 @@ SAHKDTreeFactory::buildChildrenNodesRecipe(
 // ************************ //
 bool
 SAHKDTreeFactory::checkNodeMustSplit(
-  std::vector<Primitive*> const& primitives,
-  std::vector<Primitive*> const& leftPrimitives,
-  std::vector<Primitive*> const& rightPrimitives) const
+  std::vector<GeometryRef> const& primitives,
+  std::vector<GeometryRef> const& leftPrimitives,
+  std::vector<GeometryRef> const& rightPrimitives) const
 {
   return primitives.size() >= minSplitPrimitives;
 }
@@ -183,15 +183,20 @@ SAHKDTreeFactory::checkNodeMustSplit(
 // ***  SAH UTILS  *** //
 // ******************* //
 double
-SAHKDTreeFactory::splitLoss(std::vector<Primitive*> const& primitives,
+SAHKDTreeFactory::splitLoss(std::vector<GeometryRef> const& primitives,
                             int const splitAxis,
                             double const splitPos,
                             double const r) const
 {
   // Split in left and right primitives
   size_t lps = 0, rps = 0;
-  for (Primitive* primitive : primitives) {
-    AABB const* primBox = primitive->getAABB();
+  for (GeometryRef const& primitive : primitives) {
+    std::shared_ptr<AABB> primBox =
+      primitive.isValid() ? primitive.part->geometryAABB(primitive.index)
+                          : nullptr;
+    if (primBox == nullptr) {
+      continue;
+    }
     if (primBox->getMin()[splitAxis] <= splitPos)
       ++lps;
     if (primBox->getMax()[splitAxis] > splitPos)
@@ -203,7 +208,7 @@ SAHKDTreeFactory::splitLoss(std::vector<Primitive*> const& primitives,
 }
 
 void
-SAHKDTreeFactory::computeBestSplit(std::vector<Primitive*>& primitives,
+SAHKDTreeFactory::computeBestSplit(std::vector<GeometryRef>& primitives,
                                    std::size_t const lossNodes,
                                    double const start,
                                    double const step,
@@ -227,18 +232,18 @@ SAHKDTreeFactory::computeBestSplit(std::vector<Primitive*>& primitives,
 double
 SAHKDTreeFactory::findSplitPositionBySAH(
   KDTreeNode* node,
-  std::vector<Primitive*>& primitives) const
+  std::vector<GeometryRef>& primitives) const
 {
   // Call recipe to find split position by SAH
   return findSplitPositionBySAHRecipe(
     node,
     primitives,
-    [&](std::vector<Primitive*>::iterator begin,
-        std::vector<Primitive*>::iterator end,
-        KDTreePrimitiveComparator comparator) -> void {
+    [&](std::vector<GeometryRef>::iterator begin,
+        std::vector<GeometryRef>::iterator end,
+        KDTreeGeometryComparator comparator) -> void {
       std::sort(begin, end, comparator);
     },
-    [&](std::vector<Primitive*>& primitives,
+    [&](std::vector<GeometryRef>& primitives,
         std::size_t const lossNodes,
         double const start,
         double const step,
@@ -262,11 +267,11 @@ SAHKDTreeFactory::findSplitPositionBySAH(
 double
 SAHKDTreeFactory::findSplitPositionBySAHRecipe(
   KDTreeNode* node,
-  std::vector<Primitive*>& primitives,
-  std::function<void(std::vector<Primitive*>::iterator begin,
-                     std::vector<Primitive*>::iterator end,
-                     KDTreePrimitiveComparator comparator)> f_sortPrimitives,
-  std::function<void(std::vector<Primitive*>& primitives,
+  std::vector<GeometryRef>& primitives,
+  std::function<void(std::vector<GeometryRef>::iterator begin,
+                     std::vector<GeometryRef>::iterator end,
+                     KDTreeGeometryComparator comparator)> f_sortPrimitives,
+  std::function<void(std::vector<GeometryRef>& primitives,
                      std::size_t const lossNodes,
                      double const start,
                      double const step,
@@ -279,14 +284,14 @@ SAHKDTreeFactory::findSplitPositionBySAHRecipe(
   // Obtain the object median
   f_sortPrimitives(primitives.begin(),
                    primitives.end(),
-                   KDTreePrimitiveComparator(node->splitAxis));
+                   KDTreeGeometryComparator(node->splitAxis));
 
   // Discrete search of optimal splitting plane according to loss function
   double const a = node->bound.getMin()[node->splitAxis];
   double const b = node->bound.getMax()[node->splitAxis];
   double const length = b - a;
   double const mu = (b + a) / 2.0;
-  double me = primitives[primitives.size() / 2]->getCentroid()[node->splitAxis];
+  double me = primitives[primitives.size() / 2].centroid()[node->splitAxis];
   if (me < a)
     me = a;
   if (me > b)
@@ -308,14 +313,15 @@ SAHKDTreeFactory::findSplitPositionBySAHRecipe(
 }
 
 double
-SAHKDTreeFactory::heuristicILOT(double& hi,
-                                double& hl,
-                                double& ho,
-                                double& ht,
-                                double const surfaceAreaRoot,
-                                double const surfaceAreaInterior,
-                                double const surfaceAreaLeaf,
-                                std::vector<Primitive*> const& primitives) const
+SAHKDTreeFactory::heuristicILOT(
+  double& hi,
+  double& hl,
+  double& ho,
+  double& ht,
+  double const surfaceAreaRoot,
+  double const surfaceAreaInterior,
+  double const surfaceAreaLeaf,
+  std::vector<GeometryRef> const& primitives) const
 {
   // Extract constants of interest
   double const No = (double)primitives.size();
@@ -355,9 +361,9 @@ SAHKDTreeFactory::internalizeILOT(
   double& ho,
   double& ht,
   KDTreeNode* node,
-  std::vector<Primitive*> const& primitives,
-  std::vector<Primitive*> const& leftPrimitives,
-  std::vector<Primitive*> const& rightPrimitives)
+  std::vector<GeometryRef> const& primitives,
+  std::vector<GeometryRef> const& leftPrimitives,
+  std::vector<GeometryRef> const& rightPrimitives)
 {
   heuristicILOT( // Subtract old leaf cost and add new interior cost
     hi,
@@ -390,7 +396,7 @@ SAHKDTreeFactory::internalizeILOT(
 // ********************* //
 void
 SAHKDTreeFactory::initILOT(KDTreeNode* root,
-                           std::vector<Primitive*> const& primitives)
+                           std::vector<GeometryRef> const& primitives)
 {
   double hi, hl, ho, ht;
   setCacheRoot(root); // Cache root node to compute future children's ILOT

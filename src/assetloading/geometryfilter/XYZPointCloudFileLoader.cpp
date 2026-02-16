@@ -62,9 +62,9 @@ XYZPointCloudFileLoader::run()
       logging::ERR(ss.str());
       exit(1);
     }
-    lastNumVoxels = primsOut->mPrimitives.size();
+    lastNumVoxels = primsOut->geometryCount();
     parse(filePath);
-    primsOut->subpartLimit.push_back(primsOut->mPrimitives.size());
+    primsOut->subpartLimit.push_back(primsOut->geometryCount());
   }
 
   // Return
@@ -88,8 +88,7 @@ XYZPointCloudFileLoader::parse(std::string const& filePath)
   // Legacy default material commented below
   /*mat.useVertexColors = true;
   mat.isGround = true;*/
-  materials.insert(materials.end(),
-                   std::pair<std::string, Material>(mat.name, mat));
+  materials[mat.name] = std::make_shared<Material>(mat);
 
   // Open file input stream
   std::ifstream ifs;
@@ -120,7 +119,7 @@ XYZPointCloudFileLoader::parse(std::string const& filePath)
   // Final report
   std::stringstream ss;
   ss << "Point cloud file read successful ("
-     << primsOut->mPrimitives.size() - lastNumVoxels << " voxels)\n";
+     << primsOut->geometryCount() - lastNumVoxels << " voxels)\n";
   if (unsafeNormalEstimations > 0) {
     ss << "\t" << unsafeNormalEstimations
        << " voxels did not have enough points ("
@@ -237,11 +236,10 @@ XYZPointCloudFileLoader::loadMaterial()
     return;
 
   // Assign material to each detailed voxel
-  size_t j, n = primsOut->mPrimitives.size(), m = matvec.size();
+  size_t j, n = primsOut->geometryCount(), m = matvec.size();
   for (size_t i = 0; i < n; i++) {
-    Voxel* vxl = (Voxel*)primsOut->mPrimitives[i];
     j = i % m;
-    vxl->material = matvec[j];
+    primsOut->setGeometryMaterial(i, matvec[j]);
   }
 }
 
@@ -422,7 +420,7 @@ XYZPointCloudFileLoader::digestVoxel(int estimateNormals,
   // Compute index and indices to obtain corresponding voxel
   std::size_t I, J, K;
   std::size_t const IDX = indexFromCoordinates(x, y, z, I, J, K);
-  Voxel* voxel = voxelGrid->getVoxel(IDX);
+  VoxelGridVoxel* voxel = voxelGrid->getVoxel(IDX);
 
   // If voxel does not exist, create it
   if (voxel == nullptr) {
@@ -443,22 +441,22 @@ XYZPointCloudFileLoader::digestVoxel(int estimateNormals,
   if (!estimateNormals) {
     if (snapNeighborNormal) {
       // Snap closest neighbor normal
-      double const xDiff = x - voxel->v.getX();
-      double const yDiff = y - voxel->v.getY();
-      double const zDiff = z - voxel->v.getZ();
+      double const xDiff = x - voxel->center.x;
+      double const yDiff = y - voxel->center.y;
+      double const zDiff = z - voxel->center.z;
       double const distance =
         std::sqrt(xDiff * xDiff + yDiff * yDiff + zDiff * zDiff);
       if (distance < voxelGrid->getClosestPointDistance(IDX)) {
         voxelGrid->setClosestPointDistance(IDX, distance);
-        voxel->v.normal[0] = xnorm;
-        voxel->v.normal[1] = ynorm;
-        voxel->v.normal[2] = znorm;
+        voxel->normal[0] = xnorm;
+        voxel->normal[1] = ynorm;
+        voxel->normal[2] = znorm;
       }
     } else {
       // Aggregate all points normals to compute voxel normal
-      voxel->v.normal[0] += xnorm;
-      voxel->v.normal[1] += ynorm;
-      voxel->v.normal[2] += znorm;
+      voxel->normal[0] += xnorm;
+      voxel->normal[1] += ynorm;
+      voxel->normal[2] += znorm;
     }
   }
 }
@@ -468,14 +466,14 @@ XYZPointCloudFileLoader::warnAboutPotentialErrors(
   std::string const& filePathString)
 {
   // Iterate over voxels to check them
-  Voxel* voxel;
+  VoxelGridVoxel* voxel;
   bool nonUnitaryNormals = false;
   voxelGrid->whileLoopStart();
   while (voxelGrid->whileLoopHasNext()) { // For each occupied voxel in grid
     voxel = voxelGrid->whileLoopNext();
-    if (voxel->v.normal.x < -1.0 || voxel->v.normal.x > 1.0 ||
-        voxel->v.normal.y < -1.0 || voxel->v.normal.y > 1.0 ||
-        voxel->v.normal.z < -1.0 || voxel->v.normal.z > 1.0) {
+    if (voxel->normal.x < -1.0 || voxel->normal.x > 1.0 ||
+        voxel->normal.y < -1.0 || voxel->normal.y > 1.0 ||
+        voxel->normal.z < -1.0 || voxel->normal.z > 1.0) {
       nonUnitaryNormals = true;
       break; // If more checks are added in the future, remove this break
     }
@@ -497,7 +495,7 @@ XYZPointCloudFileLoader::postProcess(std::string const& matName,
   bool tooPopulatedWarning = false;
 
   // Post processing loop
-  Voxel* voxel;
+  VoxelGridVoxel* voxel;
   voxelGrid->whileLoopStart();
   while (voxelGrid->whileLoopHasNext()) { // For each occupied voxel in grid
     voxel = voxelGrid->whileLoopNext();
@@ -505,13 +503,13 @@ XYZPointCloudFileLoader::postProcess(std::string const& matName,
       tooPopulatedWarning = true; // Check voxel population is in bounds
     }
     // Post-process voxel
-    voxel->v.color =
+    voxel->color =
       Color4f(std::sqrt(((float)voxel->r) / ((float)voxel->numPoints)),
               std::sqrt(((float)voxel->g) / ((float)voxel->numPoints)),
               std::sqrt(((float)voxel->b) / ((float)voxel->numPoints)),
               1.0);
     if (!estimateNormals && voxel->hasNormal() && !snapNeighborNormal)
-      voxel->v.normal = glm::normalize(voxel->v.normal);
+      voxel->normal = glm::normalize(voxel->normal);
     voxel->material = getMaterial(matName);
   }
 
@@ -662,7 +660,7 @@ XYZPointCloudFileLoader::_estimateNormals(std::size_t start, std::size_t end)
   voxelGrid->whileLoopStart();
   while (voxelGrid->whileLoopHasNext()) {
     size_t key;
-    Voxel* voxel = voxelGrid->whileLoopNext(&key);
+    VoxelGridVoxel* voxel = voxelGrid->whileLoopNext(&key);
     arma::Mat<double>* matrix = voxelGrid->getMatrix(key);
     if (matrix != nullptr) {
       if (voxel->numPoints <
@@ -671,7 +669,7 @@ XYZPointCloudFileLoader::_estimateNormals(std::size_t start, std::size_t end)
         unsafeNormalEstimations += 1;
         if (assignDefaultNormal) {
           // Use default normal
-          voxel->v.normal = defaultNormal;
+          voxel->normal = defaultNormal;
         } else {
           // Discard voxel
           voxelGrid->deleteVoxel(key);
@@ -681,9 +679,9 @@ XYZPointCloudFileLoader::_estimateNormals(std::size_t start, std::size_t end)
         // Estimate normal
         std::vector<double> orthonormal =
           PlaneFitter::bestFittingPlaneOrthoNormal(*matrix, true);
-        voxel->v.normal.x = orthonormal[0];
-        voxel->v.normal.y = orthonormal[1];
-        voxel->v.normal.z = orthonormal[2];
+        voxel->normal.x = orthonormal[0];
+        voxel->normal.y = orthonormal[1];
+        voxel->normal.z = orthonormal[2];
       }
     }
   }
@@ -692,12 +690,51 @@ XYZPointCloudFileLoader::_estimateNormals(std::size_t start, std::size_t end)
 void
 XYZPointCloudFileLoader::voxelsGridToScenePart()
 {
+  VoxelScenePart* const voxelPart = dynamic_cast<VoxelScenePart*>(primsOut);
+  if (voxelPart == nullptr) {
+    return;
+  }
+
+  std::size_t voxelCount = 0;
+  voxelGrid->whileLoopStart();
+  while (voxelGrid->whileLoopHasNext()) {
+    VoxelGridVoxel* voxel = voxelGrid->whileLoopNext();
+    if (voxel != nullptr) {
+      ++voxelCount;
+    }
+  }
+
+  voxelPart->centers.zeros(voxelCount, 3);
+  voxelPart->halfSizes.zeros(voxelCount, 3);
+  voxelPart->normals.zeros(voxelCount, 3);
+  voxelPart->materialIndex.zeros(voxelCount);
+  voxelPart->materialTable.clear();
+
+  std::size_t row = 0;
   voxelGrid->whileLoopStart();
   while (voxelGrid->whileLoopHasNext()) { // For each occupied voxel in grid
-    Voxel* voxel = voxelGrid->whileLoopNext();
-    // Add to primitives only if voxel has not been deleted (i.e., not null)
-    if (voxel != nullptr)
-      primsOut->mPrimitives.push_back(voxel);
+    std::size_t key = 0;
+    VoxelGridVoxel* voxel = voxelGrid->whileLoopNext(&key);
+    if (voxel == nullptr) {
+      continue;
+    }
+
+    voxelPart->centers(row, 0) = voxel->center.x;
+    voxelPart->centers(row, 1) = voxel->center.y;
+    voxelPart->centers(row, 2) = voxel->center.z;
+    voxelPart->halfSizes(row, 0) = voxel->halfSize;
+    voxelPart->halfSizes(row, 1) = voxel->halfSize;
+    voxelPart->halfSizes(row, 2) = voxel->halfSize;
+    voxelPart->normals(row, 0) = voxel->normal.x;
+    voxelPart->normals(row, 1) = voxel->normal.y;
+    voxelPart->normals(row, 2) = voxel->normal.z;
+    if (voxel->material != nullptr) {
+      voxelPart->setGeometryMaterial(row, voxel->material);
+    }
+    ++row;
+
+    // Ownership is transferred to bulk matrices, so legacy voxels are freed.
+    voxelGrid->deleteVoxel(key);
   }
 }
 

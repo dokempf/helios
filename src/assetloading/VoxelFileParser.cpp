@@ -4,28 +4,12 @@ char const VoxelFileParser::BLANK_CHARACTERS[] = { ' ', '\t', '\r', '\n' };
 
 // ***  P A R S E  *** //
 // ******************* //
-std::vector<std::shared_ptr<DetailedVoxel>>
-VoxelFileParser::parseDetailed(std::string const& path,
-                               size_t numHeaderLines,
-                               bool const exactFormat,
-                               bool const discardNullPad,
-                               std::string const separator)
-{
-  std::vector<DetailedVoxel*> oldvec = bruteParseDetailed(
-    path, numHeaderLines, exactFormat, discardNullPad, separator);
-  std::vector<std::shared_ptr<DetailedVoxel>> newvec;
-  for (DetailedVoxel* dv : oldvec) {
-    newvec.push_back(std::shared_ptr<DetailedVoxel>(dv));
-  }
-  return newvec;
-}
-
-std::vector<DetailedVoxel*>
-VoxelFileParser::bruteParseDetailed(std::string const& path,
-                                    size_t numHeaderLines,
-                                    bool const exactFormat,
-                                    bool const discardNullPad,
-                                    std::string const separator)
+std::vector<DetailedVoxelRecord>
+VoxelFileParser::parseDetailedRecords(std::string const& path,
+                                      size_t numHeaderLines,
+                                      bool const exactFormat,
+                                      bool const discardNullPad,
+                                      std::string const separator)
 {
   // Load voxels file
   std::vector<std::string> lines;
@@ -74,7 +58,8 @@ VoxelFileParser::bruteParseDetailed(std::string const& path,
                    splitZFound);
 
   // Parse voxels
-  std::vector<DetailedVoxel*> voxels(0);
+  std::vector<DetailedVoxelRecord> voxels;
+  voxels.reserve(lines.size());
   double voxelHalfSize = voxelSize / 2.0;
   const char* sep = separator.c_str();
   char format1[4096];
@@ -111,7 +96,7 @@ VoxelFileParser::bruteParseDetailed(std::string const& path,
            "%lf");
   char format3[4096];
   snprintf(format3, sizeof(format3), "%s%s", "%lf", sep);
-  DetailedVoxel* dv;
+  std::optional<DetailedVoxelRecord> dv;
   for (std::string line : lines) {
     dv = parseDetailedVoxelLine(line,
                                 separator,
@@ -129,8 +114,8 @@ VoxelFileParser::bruteParseDetailed(std::string const& path,
                                 voxelSize,
                                 voxelHalfSize,
                                 maxPad);
-    if (dv != nullptr)
-      voxels.push_back(dv);
+    if (dv.has_value())
+      voxels.push_back(std::move(*dv));
   }
 
   // Return loaded voxels
@@ -503,7 +488,7 @@ VoxelFileParser::validateDetailed(bool minCornerXFound,
   }
 }
 
-DetailedVoxel*
+std::optional<DetailedVoxelRecord>
 VoxelFileParser::parseDetailedVoxelLine(std::string& line,
                                         std::string const separator,
                                         bool const exactFormat,
@@ -562,7 +547,7 @@ VoxelFileParser::parseDetailedVoxelLine(std::string& line,
   }
   // Discard when PadBVTotal==0, if requested (e.g., transmittive mode)
   if (discardNullPad && pad == 0)
-    return nullptr;
+    return std::nullopt;
   values.push_back(pad);
   values.push_back(angMean);
   values.push_back(bsEnter);
@@ -612,11 +597,11 @@ VoxelFileParser::parseDetailedVoxelLine(std::string& line,
     }
   }
 
-  // Build DetailedVoxel
-  DetailedVoxel* dv = new DetailedVoxel(
-    x, y, z, voxelHalfSize, std::vector<int>({ nbEchos, nbSampl }), values);
-  dv->setMaxPad(maxPad);
-
-  // Return DetailedVoxel
-  return dv;
+  DetailedVoxelRecord rec;
+  rec.center = glm::dvec3(x, y, z);
+  rec.halfSize = voxelHalfSize;
+  rec.intValues = { nbEchos, nbSampl };
+  rec.doubleValues = std::move(values);
+  rec.maxPad = maxPad;
+  return rec;
 }

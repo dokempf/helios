@@ -26,7 +26,7 @@ private:
      * KDTreeNode should become the basis for KDTree node implementation,
      * it must be uncommented or serialization will not work
      */
-    // Register classes derived from Primitive
+    // Register geometry-related utility classes
     /*ar.template register_type<Vertex>();
     ar.template register_type<AABB>();
     ar.template register_type<Triangle>();

@@ -1,16 +1,26 @@
 #include <DetailedVoxelLoader.h>
 #include <GeoTiffFileLoader.h>
 #include <KDTreeFactoryMaker.h>
+#include <MaterialsFileReader.h>
 #include <SceneHandling.h>
 #include <SerialSceneWrapper.h>
 #include <SpectralLibrary.h>
 #include <WavefrontObjFileLoader.h>
 #include <XYZPointCloudFileLoader.h>
+#include <XmlAssetsLoader.h>
 
 #include <fluxionum/DiffDesignMatrixInterpolator.h>
 #include <fluxionum/ParametricLinearPiecesFunction.h>
 #include <logging.hpp>
 #include <platform/InterpolatedMovingPlatformEgg.h>
+
+namespace {
+void
+rebuildSceneGeometryView(StaticScene& scene)
+{
+  scene.rebuildGeometryRefs();
+}
+}
 
 std::shared_ptr<KDTreeFactory>
 makeKDTreeFactory(int kdtFactoryType,
@@ -51,15 +61,13 @@ finalizeStaticScene(std::shared_ptr<StaticScene> scene,
                     int kdtGeomJobs,
                     int kdtSAHLossNodes)
 {
+  scene->clearStaticObjects();
   // Loop over all scene parts and perform their final processing
   for (auto& sp : scene->parts) {
     // Append as a static object
     scene->appendStaticObject(sp);
-
-    // Add scene part primitives to the scene
-    scene->primitives.insert(
-      scene->primitives.end(), sp->mPrimitives.begin(), sp->mPrimitives.end());
   }
+  rebuildSceneGeometryView(*scene);
 
   scene->setKDGroveFactory(std::make_shared<KDGroveFactory>(makeKDTreeFactory(
     kdtFactoryType, kdtNumJobs, kdtGeomJobs, kdtSAHLossNodes)));
@@ -74,7 +82,7 @@ invalidateStaticScene(std::shared_ptr<StaticScene> scene)
 {
   scene->clearStaticObjects();
   scene->setKDGroveFactory(nullptr);
-  scene->primitives.clear();
+  scene->clearGeometryRefs();
 }
 
 void
@@ -100,8 +108,7 @@ readObjScenePart(std::string filePath,
   std::shared_ptr<ScenePart> sp(loader.run());
 
   // Connect all primitives to their scene part
-  for (auto p : sp->mPrimitives)
-    p->part = sp;
+  sp->bindGeometryOwners(sp);
 
   // Object lifetime caveat! Settings primsOut to nullptr will prevent the
   // loader destructor from deleting the primitives.
@@ -120,8 +127,7 @@ readTiffScenePart(std::string filePath, std::vector<std::string> assetsPath)
   std::shared_ptr<ScenePart> sp(loader.run());
 
   // Connect all primitives to their scene part
-  for (auto p : sp->mPrimitives)
-    p->part = sp;
+  sp->bindGeometryOwners(sp);
 
   // Object lifetime caveat! Settings primsOut to nullptr will prevent the
   // loader destructor from deleting the primitives.
@@ -185,8 +191,7 @@ readXYZScenePart(std::string filePath,
   loader.setAssetsDir(assetsPath);
 
   std::shared_ptr<ScenePart> sp(loader.run());
-  for (auto p : sp->mPrimitives)
-    p->part = sp;
+  sp->bindGeometryOwners(sp);
 
   // Object lifetime caveat! Settings primsOut to nullptr will prevent the
   // loader destructor from deleting the primitives.
@@ -220,8 +225,7 @@ readVoxScenePart(std::string filePath,
   loader.setAssetsDir(assetsPath);
   std::shared_ptr<ScenePart> sp(loader.run());
 
-  for (auto p : sp->mPrimitives)
-    p->part = sp;
+  sp->bindGeometryOwners(sp);
 
   loader.primsOut = nullptr;
 
@@ -231,22 +235,22 @@ readVoxScenePart(std::string filePath,
 void
 rotateScenePart(std::shared_ptr<ScenePart> sp, Rotation rotation)
 {
-  for (auto p : sp->mPrimitives)
-    p->rotate(rotation);
+  for (std::size_t i = 0; i < sp->geometryCount(); ++i)
+    sp->geometryRotate(i, rotation);
 }
 
 void
 scaleScenePart(std::shared_ptr<ScenePart> sp, double scaleFactor)
 {
-  for (auto p : sp->mPrimitives)
-    p->scale(scaleFactor);
+  for (std::size_t i = 0; i < sp->geometryCount(); ++i)
+    sp->geometryScale(i, scaleFactor);
 }
 
 void
 translateScenePart(std::shared_ptr<ScenePart> sp, glm::dvec3 offset)
 {
-  for (auto p : sp->mPrimitives)
-    p->translate(offset);
+  for (std::size_t i = 0; i < sp->geometryCount(); ++i)
+    sp->geometryTranslate(i, offset);
 }
 
 void
@@ -445,24 +449,124 @@ addScenePartToScene(std::shared_ptr<StaticScene> scene,
 {
   invalidateStaticScene(scene);
   scene->setKDGrove(nullptr);
+  scene->clearStaticObjects();
   for (auto& sp : scene->parts) {
     // Append as a static object
     scene->appendStaticObject(sp);
-
-    // Add scene part primitives to the scene
-    scene->primitives.insert(
-      scene->primitives.end(), sp->mPrimitives.begin(), sp->mPrimitives.end());
   }
+  rebuildSceneGeometryView(*scene);
   // Add the new scene part
-  for (Primitive* primitive : scenePart->mPrimitives) {
-    if (primitive->part == nullptr) {
-      primitive->part = scenePart;
+  scenePart->bindUnownedGeometryOwners(scenePart);
+  scene->appendStaticObject(scenePart);
+  scene->registerParts();
+  rebuildSceneGeometryView(*scene);
+  invalidateStaticScene(scene); // invalidate it for further finalization
+}
+
+std::shared_ptr<Material>
+readMaterialFromFile(std::string materialPath,
+                     std::vector<std::string> assetsPath,
+                     std::string materialId)
+{
+  fs::path searchfile(materialPath);
+  if (searchfile.is_relative()) {
+    for (const auto path : assetsPath) {
+      if (fs::exists(fs::path(path) / searchfile)) {
+        searchfile = fs::path(path) / searchfile;
+        break;
+      }
     }
   }
-  scene->appendStaticObject(scenePart);
-  scene->primitives.insert(scene->primitives.end(),
-                           scenePart->mPrimitives.begin(),
-                           scenePart->mPrimitives.end());
-  scene->registerParts();
-  invalidateStaticScene(scene); // invalidate it for further finalization
+  std::string resolved_path = searchfile.string();
+  if (resolved_path.empty()) {
+    throw std::runtime_error("Material file not found: " + materialPath);
+  }
+  auto mats = MaterialsFileReader::loadMaterials(resolved_path);
+
+  if (mats.empty()) {
+    throw std::runtime_error("No materials found in material file: " +
+                             materialPath);
+  }
+
+  if (mats.find(materialId) == mats.end()) {
+    throw std::runtime_error("Material with name: '" + materialId +
+                             "' not found in material file: " + materialPath);
+  }
+  auto it = mats.find(materialId);
+  if (it == mats.end()) {
+    throw std::runtime_error("Material with name: '" + materialId +
+                             "' not found in material file: " + materialPath);
+  }
+
+  return it->second;
+}
+
+void
+changeMaterialInstance(std::shared_ptr<ScenePart> scenePart,
+                       const std::string& oldName,
+                       std::shared_ptr<Material> newMaterial)
+{
+  bool found = false;
+
+  for (std::size_t i = 0; i < scenePart->geometryCount(); ++i) {
+    std::shared_ptr<Material> material = scenePart->geometryMaterial(i);
+    if (material != nullptr && material->name == oldName) {
+      scenePart->setGeometryMaterial(i, newMaterial);
+      found = true;
+    }
+  }
+  if (!found) {
+    throw std::runtime_error("Material with name '" + oldName +
+                             "' not found in the scene part.");
+  }
+}
+
+void
+applyMaterialToGeometryRange(std::shared_ptr<ScenePart> scenePart,
+                             std::shared_ptr<Material> material,
+                             size_t start,
+                             size_t stop)
+{
+  size_t n = scenePart->geometryCount();
+  if (n == 0 || start >= n || stop >= n || start > stop) {
+    throw std::out_of_range("Invalid range for applying material to geometry.");
+  }
+  for (size_t i = start; i <= stop; ++i) {
+    scenePart->setGeometryMaterial(i, material);
+  }
+}
+
+void
+applyMaterialToGeometryIndices(std::shared_ptr<ScenePart> scenePart,
+                               std::shared_ptr<Material> material,
+                               const std::vector<size_t>& indices)
+{
+  for (const auto& index : indices) {
+    if (index >= scenePart->geometryCount()) {
+      throw std::out_of_range("Index " + std::to_string(index) +
+                              " is out of range for geometry.");
+    }
+    scenePart->setGeometryMaterial(index, material);
+  }
+}
+
+std::vector<std::pair<std::string, std::shared_ptr<Material>>>
+getMaterialsMap(const std::shared_ptr<ScenePart>& part)
+{
+  std::vector<std::pair<std::string, std::shared_ptr<Material>>> out;
+  out.reserve(part->geometryCount());
+
+  std::unordered_set<std::string> seen;
+  seen.reserve(part->geometryCount());
+
+  for (std::size_t i = 0; i < part->geometryCount(); ++i) {
+    std::shared_ptr<Material> material = part->geometryMaterial(i);
+    if (material == nullptr)
+      continue;
+    const auto& name = material->name;
+    if (seen.insert(name).second) {
+      out.emplace_back(name, material);
+    }
+  }
+  return out;
 }

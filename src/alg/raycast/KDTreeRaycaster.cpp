@@ -1,7 +1,9 @@
 #include "KDTreeRaycaster.h"
 #include "logging.hpp"
 
-std::map<double, Primitive*>
+#include <Material.h>
+
+std::map<double, GeometryRef>
 KDTreeRaycaster::searchAll(glm::dvec3 const rayOrigin,
                            glm::dvec3 const rayDir,
                            double const tmin,
@@ -29,14 +31,14 @@ KDTreeRaycaster::search(glm::dvec3 const rayOrigin,
   KDTreeRaycasterSearch search(rayDir, rayOrigin, groundOnly);
 
   // Do recursive search
-  Primitive* prim = this->search_recursive(
+  GeometryRef primRef = this->search_recursive(
     this->root.get(), tmin - epsilon, tmax + epsilon, search);
 
   // Handle search output
-  if (prim == nullptr)
+  if (!primRef.isValid())
     return nullptr;
   RaySceneIntersection* result = new RaySceneIntersection();
-  result->prim = prim;
+  result->geometryRef = primRef;
   result->point = rayOrigin + (rayDir * search.closestHitDistance);
   result->hitDistance = search.closestHitDistance;
   return result;
@@ -52,9 +54,12 @@ KDTreeRaycaster::searchAll_recursive(LightKDTreeNode* node,
   // ######### BEGIN If node is a leaf, perform ray-primitive intersection on
   // all primitives in the leaf's bucket ###########
   if (node->splitAxis == -1) {
-    for (auto prim : *node->primitives) {
+    for (GeometryRef const& ref : *node->primitives) {
+      if (!ref.isValid()) {
+        continue;
+      }
       std::vector<double> tMinMax =
-        prim->getRayIntersection(search.rayOrigin, search.rayDir);
+        ref.rayIntersection(search.rayOrigin, search.rayDir);
       if (tMinMax.empty()) {
         logging::DEBUG("searchAll_recursive: tMinMax is empty");
         continue;
@@ -77,10 +82,12 @@ KDTreeRaycaster::searchAll_recursive(LightKDTreeNode* node,
 
       if (newDistance > 0 &&
           (newDistance >= tmin - epsilon && newDistance <= tmax + epsilon)) {
-        if (!search.groundOnly ||
-            (prim->material != nullptr && prim->material->isGround)) {
-          search.collectedPoints.insert(
-            std::pair<double, Primitive*>(newDistance, prim));
+        std::shared_ptr<Material> mat = ref.material();
+        if (!search.groundOnly || (mat != nullptr && mat->isGround)) {
+          if (ref.isValid()) {
+            search.collectedPoints.insert(
+              std::pair<double, GeometryRef>(newDistance, ref));
+          }
         }
       }
     }
@@ -153,22 +160,25 @@ KDTreeRaycaster::searchAll_recursive(LightKDTreeNode* node,
   // traverse next, in which order #############
 }
 
-Primitive*
+GeometryRef
 KDTreeRaycaster::search_recursive(LightKDTreeNode* node,
                                   double const tmin,
                                   double const tmax,
                                   KDTreeRaycasterSearch& search) const
 {
   if (node == nullptr)
-    return nullptr; // Null nodes cannot contain primitives
-  Primitive* hitPrim = nullptr;
+    return GeometryRef(); // Null nodes cannot contain primitives
+  GeometryRef hitPrim;
 
   // ######### BEGIN If node is a leaf, perform ray-primitive intersection on
   // all primitives in the leaf's bucket ###########
   if (node->splitAxis == -1) {
-    for (auto prim : *node->primitives) {
+    for (GeometryRef const& ref : *node->primitives) {
+      if (!ref.isValid()) {
+        continue;
+      }
       double const newDistance =
-        prim->getRayIntersectionDistance(search.rayOrigin, search.rayDir);
+        ref.rayIntersectionDistance(search.rayOrigin, search.rayDir);
 
       // NOTE:
       // Checking for tmin <= newDistance <= tmax here is REQUIRED
@@ -188,10 +198,10 @@ KDTreeRaycaster::search_recursive(LightKDTreeNode* node,
       // would be wrong.
       if (newDistance > 0 && newDistance < search.closestHitDistance &&
           newDistance >= tmin && newDistance <= tmax) {
-        if (!search.groundOnly ||
-            (prim->material != nullptr && prim->material->isGround)) {
+        std::shared_ptr<Material> mat = ref.material();
+        if (!search.groundOnly || (mat != nullptr && mat->isGround)) {
           search.closestHitDistance = newDistance;
-          hitPrim = prim;
+          hitPrim = ref;
         }
       }
     }
@@ -259,7 +269,7 @@ KDTreeRaycaster::search_recursive(LightKDTreeNode* node,
     else {
       hitPrim = search_recursive(first, tmin, thit + epsilon, search);
 
-      if (hitPrim == nullptr) {
+      if (!hitPrim.isValid()) {
         hitPrim = search_recursive(second, thit - epsilon, tmax, search);
       }
     }

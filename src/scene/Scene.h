@@ -4,23 +4,27 @@
 #include <boost/archive/text_oarchive.hpp>
 #include <boost/serialization/base_object.hpp>
 #include <boost/serialization/split_member.hpp>
+#include <boost/serialization/version.hpp>
 
 #include <glm/glm.hpp>
 #include <serial.h>
 
 #include <AABB.h>
 #include <Asset.h>
-#include <DetailedVoxel.h>
-#include <Triangle.h>
+#include <DetailedVoxelScenePart.h>
+#include <TriangleScenePart.h>
 #include <Vertex.h>
-#include <Voxel.h>
+#include <VoxelScenePart.h>
 
 #include <KDGrove.h>
 #include <KDGroveFactory.h>
 #include <KDGroveRaycaster.h>
 #include <KDTreeNodeRoot.h>
 
+#include <GeometryRef.h>
 #include <RaySceneIntersection.h>
+
+#include <stdexcept>
 
 /**
  * @brief Class representing a scene asset
@@ -42,12 +46,12 @@ private:
   template<class Archive>
   void save(Archive& ar, unsigned int const version) const
   {
-    // Register primitive derivates
+    // Register serializable types used by the scene graph.
     ar.template register_type<Vertex>();
-    ar.template register_type<AABB>();
-    ar.template register_type<Triangle>();
-    ar.template register_type<Voxel>();
-    ar.template register_type<DetailedVoxel>();
+    ar.template register_type<ScenePart>();
+    ar.template register_type<TriangleScenePart>();
+    ar.template register_type<VoxelScenePart>();
+    ar.template register_type<DetailedVoxelScenePart>();
 
     // Save the scene itself
     boost::serialization::void_cast_register<Scene, Asset>();
@@ -56,7 +60,6 @@ private:
     // ar &kdgrove; // KDGrove not saved because trees might be too deep
     ar & bbox;
     ar & bbox_crs;
-    ar & primitives;
     ar & parts;
   }
   /**
@@ -69,12 +72,17 @@ private:
   template<class Archive>
   void load(Archive& ar, unsigned int const fileVersion)
   {
-    // Register primitive derivates
+    if (fileVersion < 2) {
+      throw std::runtime_error(
+        "Unsupported Scene serialization version. "
+        "This build requires Scene archive version >= 2.");
+    }
+    // Register serializable types used by the scene graph.
     ar.template register_type<Vertex>();
-    ar.template register_type<AABB>();
-    ar.template register_type<Triangle>();
-    ar.template register_type<Voxel>();
-    ar.template register_type<DetailedVoxel>();
+    ar.template register_type<ScenePart>();
+    ar.template register_type<TriangleScenePart>();
+    ar.template register_type<VoxelScenePart>();
+    ar.template register_type<DetailedVoxelScenePart>();
 
     // Load the scene itself
     boost::serialization::void_cast_register<Scene, Asset>();
@@ -83,8 +91,8 @@ private:
     // ar &kdgrove; // KDTree not loaded because it might be too deep
     ar & bbox;
     ar & bbox_crs;
-    ar & primitives;
     ar & parts;
+    rebuildGeometryRefs();
 
     // Build KDTree from primitives
     if (kdgf != nullptr)
@@ -136,9 +144,14 @@ protected:
 
 public:
   /**
-   * @brief Vector of primitives composing the scene
+   * @brief Stable geometry references derived from scene parts.
    */
-  std::vector<Primitive*> primitives;
+  std::vector<GeometryRef> geometryRefs;
+  /**
+   * @brief Transient storage used to expose vertex pointer views for APIs
+   * that return `std::vector<Vertex*>`.
+   */
+  mutable std::vector<Vertex> mVertexScratch;
   /**
    * @brief Parts composing the scene with no repeats.
    *
@@ -159,11 +172,7 @@ public:
         std::make_shared<SimpleKDTreeFactory>()))
   {
   }
-  ~Scene() override
-  {
-    for (Primitive* p : primitives)
-      delete p;
-  }
+  ~Scene() override = default;
   Scene(Scene& s);
 
   // ***   M E T H O D S   *** //
@@ -189,6 +198,14 @@ public:
    * @see Scene::parts
    */
   void registerParts();
+  /**
+   * @brief Clear flattened geometry reference views.
+   */
+  void clearGeometryRefs();
+  /**
+   * @brief Rebuild the flattened geometry reference view from parts.
+   */
+  void rebuildGeometryRefs();
   /**
    * @brief Prepare the scene to deal with the simulation.
    * @param simFrequency_hz Simulation frequency the scene will work with.
@@ -241,9 +258,9 @@ public:
    * @see KDTreeRaycaster
    * @see KDTreeRaycaster::searchAll
    */
-  std::map<double, Primitive*> getIntersections(glm::dvec3& rayOrigin,
-                                                glm::dvec3& rayDir,
-                                                bool const groundOnly);
+  std::map<double, GeometryRef> getIntersections(glm::dvec3& rayOrigin,
+                                                 glm::dvec3& rayDir,
+                                                 bool const groundOnly);
 
   /**
    * @brief Obtain the minimum boundaries of the original axis aligned
@@ -363,7 +380,7 @@ public:
    */
   glm::dvec3 findForceOnGroundQ(int const searchDepth,
                                 glm::dvec3 const minzv,
-                                std::vector<Vertex*>& vertices,
+                                std::vector<glm::dvec3> const& vertices,
                                 std::vector<double> const& o,
                                 std::vector<double> const& v);
 
@@ -539,3 +556,5 @@ public:
    */
   virtual bool doSimStep() { return false; }
 };
+
+BOOST_CLASS_VERSION(Scene, 2)

@@ -57,10 +57,10 @@ PYBIND11_MAKE_OPAQUE(std::vector<Trajectory>);
 #include <scene/Material.h>
 #include <scene/RaySceneIntersection.h>
 #include <scene/primitives/AABB.h>
-#include <scene/primitives/DetailedVoxel.h>
-#include <scene/primitives/Primitive.h>
-#include <scene/primitives/Triangle.h>
 #include <scene/primitives/Vertex.h>
+#include <scene/sceneparts/DetailedVoxelScenePart.h>
+#include <scene/sceneparts/TriangleScenePart.h>
+#include <scene/sceneparts/VoxelScenePart.h>
 #include <sim/comps/SimulationCycleCallback.h>
 
 #include <DynMovingObject.h>
@@ -113,7 +113,6 @@ PYBIND11_MAKE_OPAQUE(std::vector<Trajectory>);
 #include <python/KDTreeFactoryWrapper.h>
 #include <python/NoiseSourceWrap.h>
 #include <python/NumpyArrayConversion.h>
-#include <python/PrimitiveWrap.h>
 #include <python/PulseThreadPoolInterfaceWrap.h>
 #include <python/PyHeliosSimulation.h>
 #include <python/PyXMLReader.h>
@@ -140,6 +139,11 @@ PYBIND11_MODULE(_helios, m)
 
   py::implicitly_convertible<py::iterable, VectorString>();
   py::register_exception<HeliosException>(m, "HeliosException");
+  py::register_exception<std::out_of_range>(m, "IndexError", PyExc_IndexError);
+  py::register_exception<std::invalid_argument>(
+    m, "ValueError", PyExc_ValueError);
+  py::register_exception<std::runtime_error>(
+    m, "RuntimeError", PyExc_RuntimeError);
 
   // Enable GDAL (Load its drivers)
   GDALAllRegister();
@@ -288,64 +292,7 @@ PYBIND11_MODULE(_helios, m)
     .def_readwrite("prisms", &RisleyBeamDeflector::prisms)
     .def("clone", &RisleyBeamDeflector::clone);
 
-  py::class_<Primitive, PrimitiveWrap, std::shared_ptr<Primitive>> primitive(
-    m, "Primitive");
-  primitive
-    .def(py::init<>())
-
-    .def_property(
-      "scene_part",
-      [](Primitive& prim) { return prim.part.get(); },
-      [](Primitive& prim, std::shared_ptr<ScenePart> part) {
-        prim.part = part;
-      })
-    .def_property(
-      "material",
-      [](Primitive& prim) { return prim.material.get(); },
-      [](Primitive& prim, std::shared_ptr<Material> material) {
-        prim.material = material;
-      })
-
-    .def(
-      "incidence_angle",
-      [](Primitive& prim,
-         const glm::dvec3& rayOrigin,
-         const glm::dvec3& rayDir,
-         const glm::dvec3& intersectionPoint) {
-        return prim.getIncidenceAngle_rad(rayOrigin, rayDir, intersectionPoint);
-      },
-      py::arg("rayOrigin"),
-      py::arg("rayDir"),
-      py::arg("intersectionPoint"))
-    .def("ray_intersection",
-         [](Primitive& prim,
-            const glm::dvec3& rayOrigin,
-            const glm::dvec3& rayDir) {
-           const std::vector<double>& result =
-             prim.getRayIntersection(rayOrigin, rayDir);
-           return py::cast(result);
-         })
-    .def("ray_intersection_distance",
-         [](Primitive& prim,
-            const glm::dvec3& rayOrigin,
-            const glm::dvec3& rayDir) {
-           return prim.getRayIntersectionDistance(rayOrigin, rayDir);
-         })
-    .def("update", &Primitive::update)
-    .def(
-      "is_triangle",
-      [](Primitive& prim) { return dynamic_cast<Triangle*>(&prim) != nullptr; })
-    .def("is_AABB",
-         [](Primitive& prim) { return dynamic_cast<AABB*>(&prim) != nullptr; })
-    .def("is_voxel",
-         [](Primitive& prim) { return dynamic_cast<Voxel*>(&prim) != nullptr; })
-    .def("is_detailed_voxel",
-         [](Primitive& prim) {
-           return dynamic_cast<DetailedVoxel*>(&prim) != nullptr;
-         })
-    .def("clone", &Primitive::clone);
-
-  py::class_<AABB, Primitive, std::shared_ptr<AABB>> aabb(m, "AABB");
+  py::class_<AABB, std::shared_ptr<AABB>> aabb(m, "AABB");
   aabb
 
     .def(py::init<>()) // Default constructor
@@ -387,33 +334,6 @@ PYBIND11_MODULE(_helios, m)
       py::return_value_policy::reference)
     .def("__str__", &AABB::toString);
 
-  py::class_<DetailedVoxel, std::shared_ptr<DetailedVoxel>, Primitive>
-    detailed_voxel(m, "DetailedVoxel");
-  detailed_voxel.def(py::init<>())
-    .def(py::init<glm::dvec3, double, std::vector<int>, std::vector<double>>(),
-         py::arg("center"),
-         py::arg("VoxelSize"),
-         py::arg("intValues"),
-         py::arg("doubleValues"))
-
-    .def_property(
-      "nb_echos", &DetailedVoxel::getNbEchos, &DetailedVoxel::setNbEchos)
-    .def_property("nb_sampling",
-                  &DetailedVoxel::getNbSampling,
-                  &DetailedVoxel::setNbSampling)
-    .def_property_readonly("number_of_double_values",
-                           &DetailedVoxel::getNumberOfDoubleValues)
-    .def_property(
-      "max_pad", &DetailedVoxel::getMaxPad, &DetailedVoxel::setMaxPad)
-    .def("get_double_value",
-         &DetailedVoxel::getDoubleValue,
-         "Get the value at index")
-    .def("set_double_value",
-         &DetailedVoxel::setDoubleValue,
-         "Set the value at index",
-         py::arg("index"),
-         py::arg("value"));
-
   py::class_<AbstractDetector,
              AbstractDetectorWrap,
              std::shared_ptr<AbstractDetector>>
@@ -454,31 +374,6 @@ PYBIND11_MODULE(_helios, m)
          py::arg("rangeMax_m") = std::numeric_limits<double>::max())
 
     .def("clone", &FullWaveformPulseDetector::clone);
-
-  py::class_<Triangle, std::shared_ptr<Triangle>, Primitive> triangle(
-    m, "Triangle");
-  triangle
-    .def(py::init<Vertex, Vertex, Vertex>(),
-         py::arg("v0"),
-         py::arg("v1"),
-         py::arg("v2"))
-    .def("__str__", &Triangle::toString)
-    .def("ray_intersection", &Triangle::getRayIntersection)
-
-    .def_property(
-      "vertices",
-      [](const Triangle& tri) {
-        return std::vector<Vertex>(tri.verts, tri.verts + 3);
-      },
-      [](Triangle& tri, const std::vector<Vertex>& vertices) {
-        if (vertices.size() != 3) {
-          throw std::runtime_error(
-            "Vertices array must have exactly 3 elements.");
-        }
-        std::copy(vertices.begin(), vertices.end(), tri.verts);
-      },
-      "Get and set the vertices of the Triangle")
-    .def_property_readonly("face_normal", &Triangle::getFaceNormal);
 
   py::class_<Vertex, std::shared_ptr<Vertex>> vertex(m, "Vertex");
   vertex.def(py::init<>())
@@ -622,13 +517,49 @@ PYBIND11_MODULE(_helios, m)
 
   py::class_<RaySceneIntersection, std::shared_ptr<RaySceneIntersection>>
     ray_scene_intersection(m, "RaySceneIntersection");
+  py::class_<GeometryRef>(m, "GeometryRef")
+    .def(py::init<>())
+    .def_readwrite("part", &GeometryRef::part)
+    .def_readwrite("index", &GeometryRef::index)
+    .def_property_readonly(
+      "scene_part",
+      [](GeometryRef const& ref) { return ref.part.get(); },
+      py::return_value_policy::reference)
+    .def_property(
+      "material",
+      [](GeometryRef const& ref) { return ref.material(); },
+      [](GeometryRef& ref, std::shared_ptr<Material> material) {
+        if (!ref.isValid()) {
+          throw std::runtime_error("GeometryRef is not valid.");
+        }
+        ref.part->setGeometryMaterial(ref.index, material);
+      })
+    .def_property_readonly("geometry_type", &GeometryRef::geometryType)
+    .def("centroid", &GeometryRef::centroid)
+    .def("incidence_angle",
+         &GeometryRef::incidenceAngle,
+         py::arg("rayOrigin"),
+         py::arg("rayDir"),
+         py::arg("intersectionPoint"))
+    .def("ray_intersection",
+         &GeometryRef::rayIntersection,
+         py::arg("rayOrigin"),
+         py::arg("rayDir"))
+    .def("ray_intersection_distance",
+         &GeometryRef::rayIntersectionDistance,
+         py::arg("rayOrigin"),
+         py::arg("rayDir"))
+    .def("ground_z_offset", &GeometryRef::groundZOffset)
+    .def("is_valid", &GeometryRef::isValid)
+    .def("reset", &GeometryRef::reset);
   ray_scene_intersection.def(py::init<>())
     .def(py::init<const RaySceneIntersection&>())
     .def_property(
-      "primitive",
-      [](RaySceneIntersection& self) { return self.prim; },
-      [](RaySceneIntersection& self, Primitive* prim) { self.prim = prim; },
-      py::return_value_policy::reference)
+      "geometry_ref",
+      [](RaySceneIntersection& self) { return self.geometryRef; },
+      [](RaySceneIntersection& self, GeometryRef const& ref) {
+        self.geometryRef = ref;
+      })
     .def_property(
       "point",
       [](RaySceneIntersection& self) { return self.point; },
@@ -868,7 +799,7 @@ PYBIND11_MODULE(_helios, m)
   scene_part.def(py::init<>())
     .def(py::init<const ScenePart&, bool>(),
          py::arg("sp"),
-         py::arg("shallowPrimitives") = false)
+         py::arg("shallowGeometry") = false)
 
     .def_readwrite("origin", &ScenePart::mOrigin)
     .def_readwrite("rotation", &ScenePart::mRotation)
@@ -879,19 +810,28 @@ PYBIND11_MODULE(_helios, m)
     .def_property(
       "is_ground",
       [](const ScenePart& self) {
-        if (self.mPrimitives.empty()) {
-          throw std::runtime_error("It is required to have Primitives in the "
+        if (self.geometryCount() == 0) {
+          throw std::runtime_error("It is required to have geometry in the "
                                    "ScenePart to get the isGround property.");
         }
-        return self.mPrimitives[0]->material->isGround;
+        std::shared_ptr<Material> material = self.geometryMaterial(0);
+        if (material == nullptr) {
+          throw std::runtime_error(
+            "First geometry in ScenePart has no material.");
+        }
+        return material->isGround;
       },
       [](ScenePart& self, bool isGround) {
-        if (self.mPrimitives.empty()) {
-          throw std::runtime_error("It is required to have Primitives in the "
+        if (self.geometryCount() == 0) {
+          throw std::runtime_error("It is required to have geometry in the "
                                    "ScenePart to set the isGround property.");
         }
-        for (auto& primitive : self.mPrimitives) {
-          primitive->material->isGround = isGround;
+        for (std::size_t i = 0; i < self.geometryCount(); ++i) {
+          std::shared_ptr<Material> material = self.geometryMaterial(i);
+          if (material == nullptr) {
+            continue;
+          }
+          material->isGround = isGround;
         }
       })
     .def_property("centroid", &ScenePart::getCentroid, &ScenePart::setCentroid)
@@ -932,23 +872,35 @@ PYBIND11_MODULE(_helios, m)
         }
       })
 
-    .def_property(
-      "primitives", &ScenePart::getPrimitives, &ScenePart::setPrimitives)
+    .def_property_readonly("geometry_refs",
+                           [](std::shared_ptr<ScenePart> const& self) {
+                             std::vector<GeometryRef> refs;
+                             if (self == nullptr) {
+                               return refs;
+                             }
+                             refs.reserve(self->geometryCount());
+                             for (std::size_t i = 0; i < self->geometryCount();
+                                  ++i) {
+                               refs.push_back({ self, i });
+                             }
+                             return refs;
+                           })
 
     .def_property_readonly(
-      "num_primitives",
-      [](const ScenePart& self) -> size_t { return self.mPrimitives.size(); })
+      "num_geometry_refs",
+      [](const ScenePart& self) -> size_t { return self.geometryCount(); })
 
-    .def(
-      "primitive",
-      [](ScenePart& self, size_t index) -> Primitive* {
-        if (index < self.mPrimitives.size()) {
-          return self.mPrimitives[index];
-        } else {
-          throw std::out_of_range("Index out of range");
-        }
-      },
-      py::return_value_policy::reference)
+    .def("geometry_ref",
+         [](std::shared_ptr<ScenePart> const& self, size_t index) {
+           if (self == nullptr) {
+             throw std::runtime_error("ScenePart is null.");
+           }
+           if (index < self->geometryCount()) {
+             return GeometryRef{ self, index };
+           } else {
+             throw std::out_of_range("Index out of range");
+           }
+         })
     .def_property_readonly("all_vertices", &ScenePart::getAllVertices)
     .def("isDynamicMovingObject",
          [](const ScenePart& self) -> bool {
@@ -962,16 +914,265 @@ PYBIND11_MODULE(_helios, m)
          py::arg("computeBound") = true)
     .def("compute_transform", &ScenePart::computeTransformations);
 
+  py::class_<TriangleScenePart, ScenePart, std::shared_ptr<TriangleScenePart>>
+    triangle_scene_part(m, "TriangleScenePart");
+  triangle_scene_part.def(py::init<>())
+    .def(py::init<std::size_t>(), py::arg("triangle_count"))
+    .def(
+      "set_triangle",
+      [](TriangleScenePart& part,
+         std::size_t index,
+         Vertex const& v0,
+         Vertex const& v1,
+         Vertex const& v2) {
+        if (index >= part.vertices.n_rows) {
+          throw std::out_of_range("Triangle index out of range");
+        }
+        if (part.normals.n_rows != part.vertices.n_rows ||
+            part.normals.n_cols != 9) {
+          part.normals.zeros(part.vertices.n_rows, 9);
+        }
+
+        part.vertices(index, 0) = v0.pos.x;
+        part.vertices(index, 1) = v0.pos.y;
+        part.vertices(index, 2) = v0.pos.z;
+        part.vertices(index, 3) = v1.pos.x;
+        part.vertices(index, 4) = v1.pos.y;
+        part.vertices(index, 5) = v1.pos.z;
+        part.vertices(index, 6) = v2.pos.x;
+        part.vertices(index, 7) = v2.pos.y;
+        part.vertices(index, 8) = v2.pos.z;
+
+        glm::dvec3 n = glm::cross(v1.pos - v0.pos, v2.pos - v0.pos);
+        double const len = glm::length(n);
+        if (len > 0.0) {
+          n /= len;
+        } else {
+          n = glm::dvec3(0.0);
+        }
+        for (std::size_t i = 0; i < 3; ++i) {
+          part.normals(index, 3 * i) = n.x;
+          part.normals(index, 3 * i + 1) = n.y;
+          part.normals(index, 3 * i + 2) = n.z;
+        }
+      },
+      py::arg("index"),
+      py::arg("v0"),
+      py::arg("v1"),
+      py::arg("v2"))
+    .def("triangle_vertices",
+         [](TriangleScenePart const& part, std::size_t index) {
+           if (index >= part.vertices.n_rows) {
+             throw std::out_of_range("Triangle index out of range");
+           }
+           std::vector<Vertex> out(3);
+           for (std::size_t i = 0; i < 3; ++i) {
+             std::size_t const base = 3 * i;
+             out[i].pos = glm::dvec3(part.vertices(index, base),
+                                     part.vertices(index, base + 1),
+                                     part.vertices(index, base + 2));
+             if (part.normals.n_rows > index && part.normals.n_cols == 9) {
+               out[i].normal = glm::dvec3(part.normals(index, base),
+                                          part.normals(index, base + 1),
+                                          part.normals(index, base + 2));
+             }
+           }
+           return out;
+         })
+    .def("face_normal", [](TriangleScenePart const& part, std::size_t index) {
+      if (index >= part.vertices.n_rows) {
+        throw std::out_of_range("Triangle index out of range");
+      }
+      glm::dvec3 const v0(part.vertices(index, 0),
+                          part.vertices(index, 1),
+                          part.vertices(index, 2));
+      glm::dvec3 const v1(part.vertices(index, 3),
+                          part.vertices(index, 4),
+                          part.vertices(index, 5));
+      glm::dvec3 const v2(part.vertices(index, 6),
+                          part.vertices(index, 7),
+                          part.vertices(index, 8));
+      glm::dvec3 n = glm::cross(v1 - v0, v2 - v0);
+      double const len = glm::length(n);
+      return (len > 0.0) ? n / len : glm::dvec3(0.0);
+    });
+
+  py::class_<VoxelScenePart, ScenePart, std::shared_ptr<VoxelScenePart>>
+    voxel_scene_part(m, "VoxelScenePart");
+  voxel_scene_part.def(py::init<>())
+    .def(py::init<std::size_t>(), py::arg("voxel_count"))
+    .def(
+      "set_voxel",
+      [](VoxelScenePart& part,
+         std::size_t index,
+         glm::dvec3 const& center,
+         double half_size) {
+        if (index >= part.centers.n_rows) {
+          throw std::out_of_range("Voxel index out of range");
+        }
+        if (part.halfSizes.n_rows != part.centers.n_rows ||
+            part.halfSizes.n_cols != 3) {
+          part.halfSizes.zeros(part.centers.n_rows, 3);
+        }
+        if (part.normals.n_rows != part.centers.n_rows ||
+            part.normals.n_cols != 3) {
+          part.normals.zeros(part.centers.n_rows, 3);
+        }
+        part.centers(index, 0) = center.x;
+        part.centers(index, 1) = center.y;
+        part.centers(index, 2) = center.z;
+        part.halfSizes(index, 0) = half_size;
+        part.halfSizes(index, 1) = half_size;
+        part.halfSizes(index, 2) = half_size;
+      },
+      py::arg("index"),
+      py::arg("center"),
+      py::arg("half_size"));
+
+  py::class_<DetailedVoxelScenePart,
+             VoxelScenePart,
+             std::shared_ptr<DetailedVoxelScenePart>>
+    detailed_voxel_scene_part(m, "DetailedVoxelScenePart");
+  detailed_voxel_scene_part.def(py::init<>())
+    .def(py::init<std::size_t>(), py::arg("voxel_count"))
+    .def(
+      "set_detailed_voxel",
+      [](DetailedVoxelScenePart& part,
+         std::size_t voxelIndex,
+         glm::dvec3 const& center,
+         double half_size,
+         std::vector<int> const& intValues,
+         std::vector<double> const& doubleValues) {
+        if (voxelIndex >= part.centers.n_rows) {
+          throw std::out_of_range("Voxel index out of range");
+        }
+
+        if (part.halfSizes.n_rows != part.centers.n_rows ||
+            part.halfSizes.n_cols != 3) {
+          part.halfSizes.zeros(part.centers.n_rows, 3);
+        }
+        if (part.normals.n_rows != part.centers.n_rows ||
+            part.normals.n_cols != 3) {
+          part.normals.zeros(part.centers.n_rows, 3);
+        }
+        part.centers(voxelIndex, 0) = center.x;
+        part.centers(voxelIndex, 1) = center.y;
+        part.centers(voxelIndex, 2) = center.z;
+        part.halfSizes(voxelIndex, 0) = half_size;
+        part.halfSizes(voxelIndex, 1) = half_size;
+        part.halfSizes(voxelIndex, 2) = half_size;
+
+        if (part.intData.n_rows != part.centers.n_rows ||
+            part.intData.n_cols < intValues.size()) {
+          arma::uword const intCols = std::max<arma::uword>(
+            part.intData.n_cols, static_cast<arma::uword>(intValues.size()));
+          arma::Mat<int> resized(
+            part.centers.n_rows, intCols, arma::fill::zeros);
+          if (part.intData.n_rows > 0 && part.intData.n_cols > 0) {
+            resized.submat(
+              0, 0, part.intData.n_rows - 1, part.intData.n_cols - 1) =
+              part.intData;
+          }
+          part.intData = std::move(resized);
+        }
+        if (part.doubleData.n_rows != part.centers.n_rows ||
+            part.doubleData.n_cols < doubleValues.size()) {
+          arma::uword const doubleCols = std::max<arma::uword>(
+            part.doubleData.n_cols,
+            static_cast<arma::uword>(doubleValues.size()));
+          arma::mat resized(part.centers.n_rows, doubleCols, arma::fill::zeros);
+          if (part.doubleData.n_rows > 0 && part.doubleData.n_cols > 0) {
+            resized.submat(
+              0, 0, part.doubleData.n_rows - 1, part.doubleData.n_cols - 1) =
+              part.doubleData;
+          }
+          part.doubleData = std::move(resized);
+        }
+
+        for (std::size_t i = 0; i < part.intData.n_cols; ++i) {
+          part.intData(voxelIndex, i) = 0;
+        }
+        for (std::size_t i = 0; i < intValues.size(); ++i) {
+          part.intData(voxelIndex, i) = intValues[i];
+        }
+
+        for (std::size_t i = 0; i < part.doubleData.n_cols; ++i) {
+          part.doubleData(voxelIndex, i) = 0.0;
+        }
+        for (std::size_t i = 0; i < doubleValues.size(); ++i) {
+          part.doubleData(voxelIndex, i) = doubleValues[i];
+        }
+
+        if (part.identifiers.n_elem < part.doubleData.n_cols) {
+          part.identifiers.set_size(part.doubleData.n_cols);
+          for (std::size_t i = 0; i < part.identifiers.n_elem; ++i) {
+            part.identifiers(i) = i;
+          }
+        }
+      },
+      py::arg("index"),
+      py::arg("center"),
+      py::arg("half_size"),
+      py::arg("int_values"),
+      py::arg("double_values"))
+    .def_property(
+      "max_pad",
+      [](DetailedVoxelScenePart const& part) { return part.maxPad; },
+      [](DetailedVoxelScenePart& part, double value) { part.maxPad = value; })
+    .def("get_int_value",
+         [](DetailedVoxelScenePart const& part,
+            std::size_t voxelIndex,
+            std::size_t valueIndex) {
+           if (voxelIndex >= part.intData.n_rows ||
+               valueIndex >= part.intData.n_cols) {
+             throw std::out_of_range("Detailed voxel index out of range");
+           }
+           return part.intData(voxelIndex, valueIndex);
+         })
+    .def("set_int_value",
+         [](DetailedVoxelScenePart& part,
+            std::size_t voxelIndex,
+            std::size_t valueIndex,
+            int value) {
+           if (voxelIndex >= part.intData.n_rows ||
+               valueIndex >= part.intData.n_cols) {
+             throw std::out_of_range("Detailed voxel index out of range");
+           }
+           part.intData(voxelIndex, valueIndex) = value;
+         })
+    .def("get_double_value",
+         [](DetailedVoxelScenePart const& part,
+            std::size_t voxelIndex,
+            std::size_t valueIndex) {
+           if (voxelIndex >= part.doubleData.n_rows ||
+               valueIndex >= part.doubleData.n_cols) {
+             throw std::out_of_range("Detailed voxel index out of range");
+           }
+           return part.doubleData(voxelIndex, valueIndex);
+         })
+    .def("set_double_value",
+         [](DetailedVoxelScenePart& part,
+            std::size_t voxelIndex,
+            std::size_t valueIndex,
+            double value) {
+           if (voxelIndex >= part.doubleData.n_rows ||
+               valueIndex >= part.doubleData.n_cols) {
+             throw std::out_of_range("Detailed voxel index out of range");
+           }
+           part.doubleData(voxelIndex, valueIndex) = value;
+         });
+
   py::enum_<ScenePart::ObjectType>(m, "ObjectType")
     .value("STATIC_OBJECT", ScenePart::STATIC_OBJECT)
     .value("DYN_OBJECT", ScenePart::DYN_OBJECT)
     .value("DYN_MOVING_OBJECT", ScenePart::DYN_MOVING_OBJECT)
     .export_values();
 
-  py::enum_<ScenePart::PrimitiveType>(m, "PrimitiveType")
+  py::enum_<ScenePart::GeometryType>(m, "GeometryType")
     .value("NONE", ScenePart::NONE)
     .value("TRIANGLE", ScenePart::TRIANGLE)
     .value("VOXEL", ScenePart::VOXEL)
+    .value("DETAILED_VOXEL", ScenePart::DETAILED_VOXEL)
     .export_values();
 
   py::class_<ScannerSettings, std::shared_ptr<ScannerSettings>>
@@ -1054,15 +1255,13 @@ PYBIND11_MODULE(_helios, m)
     .def(py::init<Scene&>(), py::arg("scene"))
 
     .def_readwrite("scene_parts", &Scene::parts)
-    .def_readwrite("primitives", &Scene::primitives)
+    .def_property_readonly("geometry_refs",
+                           [](Scene const& self) { return self.geometryRefs; })
 
     .def_property("bbox", &Scene::getBBox, &Scene::setBBox)
     .def_property("bbox_crs", &Scene::getBBoxCRS, &Scene::setBBoxCRS)
     .def_property(
       "kd_grove_factory", &Scene::getKDGroveFactory, &Scene::setKDGroveFactory)
-    .def_property_readonly(
-      "num_primitives",
-      [](const ScenePart& self) -> size_t { return self.mPrimitives.size(); })
     .def_property_readonly(
       "aabb", &Scene::getAABB, py::return_value_policy::reference)
 
@@ -1099,42 +1298,23 @@ PYBIND11_MODULE(_helios, m)
     .def("translate",
          [](Scene& scene, double x, double y, double z) {
            glm::dvec3 shift(x, y, z);
-           for (Primitive* p : scene.primitives) {
-             p->translate(shift);
+           for (std::shared_ptr<ScenePart> const& part : scene.parts) {
+             if (part == nullptr) {
+               continue;
+             }
+             for (std::size_t i = 0; i < part->geometryCount(); ++i) {
+               part->geometryTranslate(i, shift);
+             }
            }
          })
-    .def(
-      "new_triangle",
-      [](Scene& scene) {
-        Vertex v;
-        v.pos[0] = 0.0;
-        v.pos[1] = 0.0;
-        v.pos[2] = 0.0;
-        Triangle* tri = new Triangle(v, v, v);
-        scene.primitives.push_back(tri);
-        return tri;
-      },
-      py::return_value_policy::reference)
-    .def(
-      "new_detailed_voxel",
-      [](Scene& scene) {
-        std::vector<int> vi({ 0, 0 });
-        std::vector<double> vd({ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 });
-        DetailedVoxel* dv = new DetailedVoxel(0.0, 0.0, 0.0, 0.5, vi, vd);
-        scene.primitives.push_back(dv);
-        return dv;
-      },
-      py::return_value_policy::reference)
-    .def(
-      "primitive",
-      [](Scene& scene, size_t index) -> Primitive* {
-        if (index < scene.primitives.size()) {
-          return scene.primitives[index];
-        } else {
-          throw std::out_of_range("Index out of range");
-        }
-      },
-      py::return_value_policy::reference)
+    .def("geometry_ref",
+         [](Scene const& scene, size_t index) {
+           if (index < scene.geometryRefs.size()) {
+             return scene.geometryRefs[index];
+           } else {
+             throw std::out_of_range("Index out of range");
+           }
+         })
     .def("build_kd_grove", &Scene::buildKDGroveWithLog, py::arg("safe") = true)
     .def("intersection_min_max",
          py::overload_cast<std::vector<double> const&,
@@ -1403,12 +1583,11 @@ PYBIND11_MODULE(_helios, m)
 
     .def_property(
       "baseline",
-      [](SwapOnRepeatHandler& self) { return self.baseline.get(); },
-
-      [](SwapOnRepeatHandler& self, ScenePart* baseline) {
-        self.baseline.reset(baseline);
+      [](SwapOnRepeatHandler& self) { return self.baseline; },
+      [](SwapOnRepeatHandler& self, std::shared_ptr<ScenePart> baseline) {
+        self.baseline = std::move(baseline);
       },
-      py::return_value_policy::take_ownership)
+      py::return_value_policy::reference_internal)
 
     .def_property_readonly("num_target_swaps",
                            &SwapOnRepeatHandler::getNumTargetSwaps)
@@ -3121,5 +3300,10 @@ PYBIND11_MODULE(_helios, m)
   m.def("load_interpolated_platform", &load_interpolated_platform);
   m.def("add_scene_part_to_scene", &addScenePartToScene);
   m.def("check_integrate_survey_and_legs", &checkIntegrateSurveyAndLegs);
+  m.def("read_material_from_file", &readMaterialFromFile);
+  m.def("apply_material_to_geometry_indices", &applyMaterialToGeometryIndices);
+  m.def("apply_material_to_geometry_range", &applyMaterialToGeometryRange);
+  m.def("change_material_instance", &changeMaterialInstance);
+  m.def("get_materials_map", &getMaterialsMap);
 }
 }

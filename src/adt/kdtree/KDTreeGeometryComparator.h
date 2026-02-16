@@ -1,11 +1,11 @@
 #pragma once
 
-#include "Primitive.h"
+#include <GeometryRef.h>
 
 /**
  * @brief KDTree primitive comparator
  */
-struct KDTreePrimitiveComparator
+struct KDTreeGeometryComparator
 {
   // ***  ATTRIBUTES  *** //
   // ******************** //
@@ -21,7 +21,7 @@ public:
    * @brief Constructor for KDTree primitive comparator
    * @param axis
    */
-  explicit KDTreePrimitiveComparator(int axis) { this->axis = axis; }
+  explicit KDTreeGeometryComparator(int axis) { this->axis = axis; }
 
   // ***  M E T H O D S  *** //
   // *********************** //
@@ -33,10 +33,10 @@ public:
    *  greater than coordinate of primitive b at the same axis, false
    *  otherwise
    */
-  bool operator()(Primitive* a, Primitive* b)
+  bool operator()(GeometryRef const& a, GeometryRef const& b) const
   {
-    auto ax = a->getCentroid()[axis];
-    auto bx = b->getCentroid()[axis];
+    auto const ax = a.centroid()[axis];
+    auto const bx = b.centroid()[axis];
     if (ax > bx)
       return true;
     return false;

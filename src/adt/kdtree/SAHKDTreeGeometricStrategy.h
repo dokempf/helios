@@ -67,7 +67,7 @@ protected:
    */
   void GEOM_defineSplit(KDTreeNode* node,
                         KDTreeNode* parent,
-                        std::vector<Primitive*>& primitives,
+                        std::vector<GeometryRef>& primitives,
                         int const depth,
                         int const assignedThreads) const override;
   /**
@@ -80,11 +80,11 @@ protected:
   void GEOM_buildChildrenNodes(
     KDTreeNode* node,
     KDTreeNode* parent,
-    std::vector<Primitive*> const& primitives,
+    std::vector<GeometryRef> const& primitives,
     int const depth,
     int const index,
-    std::vector<Primitive*>& leftPrimitives,
-    std::vector<Primitive*>& rightPrimitives,
+    std::vector<GeometryRef>& leftPrimitives,
+    std::vector<GeometryRef>& rightPrimitives,
     std::shared_ptr<SharedTaskSequencer> masters) override;
   /**
    * @brief Geometry-level parallel version of the
@@ -96,6 +96,6 @@ protected:
    */
   virtual double GEOM_findSplitPositionBySAH(
     KDTreeNode* node,
-    std::vector<Primitive*>& primitives,
+    std::vector<GeometryRef>& primitives,
     int assignedThreads) const;
 };

@@ -1,10 +1,35 @@
 #pragma once
 
-#include <scene/primitives/Voxel.h>
+#include <util/Color4f.h>
 
 #include <armadillo>
+#include <glm/glm.hpp>
 
 #include <cstdlib>
+#include <memory>
+
+class Material;
+
+/**
+ * @brief Plain voxel accumulation payload used while loading point clouds.
+ */
+struct VoxelGridVoxel
+{
+  glm::dvec3 center = glm::dvec3(0.0);
+  glm::dvec3 normal = glm::dvec3(0.0);
+  std::size_t numPoints = 0;
+  double r = 0.0;
+  double g = 0.0;
+  double b = 0.0;
+  Color4f color;
+  double halfSize = 0.0;
+  std::shared_ptr<Material> material = nullptr;
+
+  inline bool hasNormal() const
+  {
+    return normal.x != 0.0 || normal.y != 0.0 || normal.z != 0.0;
+  }
+};
 
 /**
  * @brief VoxelGridCell is used to build and fill all necessary voxels to
@@ -13,9 +38,9 @@
 struct VoxelGridCell
 {
   /**
-   * @brief The voxel itself.
+   * @brief The voxel accumulation payload itself.
    */
-  Voxel* voxel = nullptr;
+  VoxelGridVoxel* voxel = nullptr;
   /**
    * @brief Matrix of point-wise coordinates.
    */
@@ -80,7 +105,7 @@ public:
    * @param key The key univocally identifying the voxel.
    * @return The requested voxel.
    */
-  virtual Voxel* getVoxel(size_t const key) = 0;
+  virtual VoxelGridVoxel* getVoxel(size_t const key) = 0;
   /**
    * @brief Set the voxel associated to the given key.
    * @param key The key univocally identifying the voxel.
@@ -91,11 +116,11 @@ public:
    *  coordinates).
    * @return A pointer to the setted voxel
    */
-  virtual Voxel* setVoxel(size_t const key,
-                          double const x,
-                          double const y,
-                          double const z,
-                          double halfVoxelSize) = 0;
+  virtual VoxelGridVoxel* setVoxel(size_t const key,
+                                   double const x,
+                                   double const y,
+                                   double const z,
+                                   double halfVoxelSize) = 0;
   /**
    * @brief Delete the given voxel, provided it exists.
    * @param key The key that univocally identifies the voxel to be deteled.
@@ -216,5 +241,5 @@ public:
    * @return The Voxel of the next iteration.
    * @see VoxelGridCell
    */
-  virtual Voxel* whileLoopNext(std::size_t* key = nullptr) = 0;
+  virtual VoxelGridVoxel* whileLoopNext(std::size_t* key = nullptr) = 0;
 };

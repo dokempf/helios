@@ -16,11 +16,11 @@ TEST_CASE("Voxel Parsing Test ")
     FAIL("Voxel file not found: " + vfPath);
   }
   VoxelFileParser vfp;
-  std::vector<std::shared_ptr<DetailedVoxel>> dvoxels =
-    vfp.parseDetailed(vfPath, 2, false);
+  std::vector<DetailedVoxelRecord> dvoxels =
+    vfp.parseDetailedRecords(vfPath, 2, false);
   REQUIRE(dvoxels.size() == 36);
 
-  std::shared_ptr<DetailedVoxel> dv;
+  DetailedVoxelRecord const* dv = nullptr;
   double xDiff, yDiff, zDiff;
 
   SECTION("Expected int values")
@@ -36,9 +36,9 @@ TEST_CASE("Voxel Parsing Test ")
     };
     // Test expected int values
     for (size_t i = 0; i < dvoxels.size(); i++) {
-      dv = dvoxels[i];
-      REQUIRE(dv->getNbEchos() == EXPECTED_nbEchos[i]);
-      REQUIRE(dv->getNbSampling() == EXPECTED_nbSampling[i]);
+      dv = &dvoxels[i];
+      REQUIRE(dv->intValues[0] == EXPECTED_nbEchos[i]);
+      REQUIRE(dv->intValues[1] == EXPECTED_nbSampling[i]);
     }
   }
 
@@ -83,15 +83,15 @@ TEST_CASE("Voxel Parsing Test ")
 
     // Test expected double values
     for (size_t i = 0; i < dvoxels.size(); i++) {
-      dv = dvoxels[i];
-      REQUIRE((*dv)[0] == EXPECTED_PadBVTotal[i]);
-      REQUIRE((*dv)[1] == EXPECTED_angleMean[i]);
-      REQUIRE((*dv)["bsPotential"] == EXPECTED_bsPotential[i]);
-      xDiff = dv->getCentroid().x - EXPECTED_x[i];
+      dv = &dvoxels[i];
+      REQUIRE(dv->doubleValues[0] == EXPECTED_PadBVTotal[i]);
+      REQUIRE(dv->doubleValues[1] == EXPECTED_angleMean[i]);
+      REQUIRE(dv->doubleValues[4] == EXPECTED_bsPotential[i]);
+      xDiff = dv->center.x - EXPECTED_x[i];
       REQUIRE((xDiff >= -eps && xDiff <= eps));
-      yDiff = dv->getCentroid().y - EXPECTED_y[i];
+      yDiff = dv->center.y - EXPECTED_y[i];
       REQUIRE((yDiff >= -eps && yDiff <= eps));
-      zDiff = dv->getCentroid().z - EXPECTED_z[i];
+      zDiff = dv->center.z - EXPECTED_z[i];
       REQUIRE((zDiff >= -eps && zDiff <= eps));
       REQUIRE(dv->halfSize == 5.0);
     }

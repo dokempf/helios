@@ -7,7 +7,9 @@ target_include_directories(
 target_sources(
   helios_test
   PUBLIC
+  "AABBUtilityTest.cpp"
   "AssetLoadingTest.cpp"
+  "DynObjectBulkUpdateTest.cpp"
   "DiscreteTimeTest.cpp"
   "EnergyModelsTest.cpp"
   "ExprTreeTest.cpp"
@@ -15,6 +17,7 @@ target_sources(
   "FunctionalPlatformTest.cpp"
   "GroveTest.cpp"
   "HPCTest.cpp"
+  "KDTreeBulkGeometryRefTest.cpp"
   "LadLutTest.cpp"
   "NoiseTest.cpp"
   "PlaneFitterTest.cpp"
@@ -22,8 +25,12 @@ target_sources(
   "RandomTest.cpp"
   "RayIntersectionTest.cpp"
   "RigidMotionTest.cpp"
+  "ScenePartBulkDetailedVoxelTest.cpp"
+  "ScenePartBulkTriangleTest.cpp"
+  "ScenePartBulkVoxelTest.cpp"
   "ScenePartSplitTest.cpp"
   "SerializationTest.cpp"
+  "SwapOnRepeatBulkTest.cpp"
   "SurveyCopyTest.cpp"
   "VoxelParsingTest.cpp"
 )

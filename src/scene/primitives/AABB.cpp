@@ -13,25 +13,6 @@ AABB::AABB(glm::dvec3 min, glm::dvec3 max)
   this->bounds[1] = max;
 }
 
-Primitive*
-AABB::clone()
-{
-  AABB* aabb = new AABB();
-  _clone(aabb);
-  return aabb;
-}
-
-void
-AABB::_clone(Primitive* p)
-{
-  Primitive::_clone(p);
-  AABB* aabb = (AABB*)p;
-  aabb->vertices[0] = Vertex(vertices[0]);
-  aabb->vertices[1] = Vertex(vertices[1]);
-  aabb->bounds[0] = this->bounds[0];
-  aabb->bounds[1] = this->bounds[1];
-}
-
 // ***  M E T H O D S  *** //
 // *********************** //
 glm::dvec3
@@ -45,45 +26,6 @@ glm::dvec3
 AABB::getSize()
 {
   return getMax() - getMin();
-}
-
-std::shared_ptr<AABB>
-AABB::getForPrimitives(std::vector<Primitive*>& primitives)
-{
-  double minX = std::numeric_limits<double>::max();
-  double minY = std::numeric_limits<double>::max();
-  double minZ = std::numeric_limits<double>::max();
-
-  double maxX = std::numeric_limits<double>::lowest();
-  double maxY = std::numeric_limits<double>::lowest();
-  double maxZ = std::numeric_limits<double>::lowest();
-
-  for (Primitive* p : primitives) {
-    Vertex* v = p->getFullVertices();
-    size_t const numVertices = p->getNumFullVertices();
-    for (size_t i = 0; i < numVertices; ++i) {
-      double const vx = v[i].pos.x;
-      double const vy = v[i].pos.y;
-      double const vz = v[i].pos.z;
-      if (vx < minX)
-        minX = vx;
-      if (vx > maxX)
-        maxX = vx;
-      if (vy < minY)
-        minY = vy;
-      if (vy > maxY)
-        maxY = vy;
-      if (vz < minZ)
-        minZ = vz;
-      if (vz > maxZ)
-        maxZ = vz;
-    }
-  }
-
-  glm::dvec3 min = glm::dvec3(minX, minY, minZ);
-  glm::dvec3 max = glm::dvec3(maxX, maxY, maxZ);
-
-  return std::shared_ptr<AABB>(new AABB(min, max));
 }
 
 std::shared_ptr<AABB>

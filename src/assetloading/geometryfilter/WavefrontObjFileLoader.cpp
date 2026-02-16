@@ -5,6 +5,7 @@
 #include <filems/read/exceptions/EndOfReadingException.h>
 
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <util/logger/logging.hpp>
 
@@ -23,8 +24,6 @@ typedef boost::
 namespace fs = boost::filesystem;
 #include <FileUtils.h>
 
-#include "Triangle.h"
-
 #include "MaterialsFileReader.h"
 
 // ***  MAIN METHODS *** //
@@ -32,6 +31,44 @@ namespace fs = boost::filesystem;
 ScenePart*
 WavefrontObjFileLoader::run()
 {
+  TriangleScenePart* const trianglePart =
+    dynamic_cast<TriangleScenePart*>(primsOut);
+  if (trianglePart == nullptr) {
+    throw std::runtime_error(
+      "WavefrontObjFileLoader expected TriangleScenePart output");
+  }
+
+  auto appendWavefrontObj = [&](WavefrontObj const& obj) {
+    std::size_t const appendCount = obj.triangles.size();
+    if (appendCount == 0) {
+      return;
+    }
+
+    std::size_t const oldRows = trianglePart->vertices.n_rows;
+    std::size_t const newRows = oldRows + appendCount;
+    trianglePart->vertices.resize(newRows, 9);
+    trianglePart->normals.resize(newRows, 9);
+    trianglePart->materialIndex.resize(newRows);
+
+    std::size_t row = oldRows;
+    for (WavefrontObj::TriangleRecord const& tri : obj.triangles) {
+      for (std::size_t j = 0; j < 3; ++j) {
+        Vertex const& v = tri.verts[j];
+        trianglePart->vertices(row, j * 3) = v.pos.x;
+        trianglePart->vertices(row, j * 3 + 1) = v.pos.y;
+        trianglePart->vertices(row, j * 3 + 2) = v.pos.z;
+        trianglePart->normals(row, j * 3) = v.normal.x;
+        trianglePart->normals(row, j * 3 + 1) = v.normal.y;
+        trianglePart->normals(row, j * 3 + 2) = v.normal.z;
+      }
+      trianglePart->materialIndex(row) = 0;
+      if (tri.material != nullptr) {
+        trianglePart->setGeometryMaterial(row, tri.material);
+      }
+      ++row;
+    }
+  };
+
   // Determine filepath
   auto filePaths = FileUtils::handleFilePath(params, assetsDir);
 
@@ -82,11 +119,8 @@ WavefrontObjFileLoader::run()
 
     logging::DEBUG(ss.str());
     if (loadedObj != nullptr) {
-      // TODO Restore addObj below
-      // primsOut->addObj(cache.get(pathString));
-      // TODO Remove addObj below
-      primsOut->addObj(loadedObj);
-      primsOut->subpartLimit.push_back(primsOut->mPrimitives.size());
+      appendWavefrontObj(*loadedObj);
+      primsOut->subpartLimit.push_back(primsOut->geometryCount());
     }
 
     delete loadedObj;
@@ -104,7 +138,7 @@ WavefrontObjFileLoader::run()
 
   // Report
   std::stringstream ss;
-  ss << "# total primitives loaded: " << primsOut->mPrimitives.size();
+  ss << "# total primitives loaded: " << primsOut->geometryCount();
   logging::DEBUG(ss.str());
 
   // Return
@@ -221,25 +255,33 @@ WavefrontObjFileLoader::readPrimitive(WavefrontObj* loadedObj,
       return;
     }
 
+    std::shared_ptr<Material> const material = getMaterial(currentMat);
+
     // Read a triangle:
     if (lineParts.size() == 4) {
-      Triangle* tri = new Triangle(verts[0], verts[1], verts[2]);
-      tri->material = getMaterial(currentMat);
-      //      primsOut->mPrimitives.push_back(tri);
-      loadedObj->primitives.push_back(tri);
+      WavefrontObj::TriangleRecord tri;
+      tri.verts[0] = verts[0];
+      tri.verts[1] = verts[1];
+      tri.verts[2] = verts[2];
+      tri.material = material;
+      loadedObj->triangles.push_back(tri);
     }
 
     // Read a quad (two triangles):
     else if (lineParts.size() == 5) {
-      Triangle* tri1 = new Triangle(verts[0], verts[1], verts[2]);
-      tri1->material = getMaterial(currentMat);
-      //      primsOut->mPrimitives.push_back(tri1);
-      loadedObj->primitives.push_back(tri1);
+      WavefrontObj::TriangleRecord tri1;
+      tri1.verts[0] = verts[0];
+      tri1.verts[1] = verts[1];
+      tri1.verts[2] = verts[2];
+      tri1.material = material;
+      loadedObj->triangles.push_back(tri1);
 
-      Triangle* tri2 = new Triangle(verts[0], verts[2], verts[3]);
-      tri2->material = getMaterial(currentMat);
-      //      primsOut->mPrimitives.push_back(tri2);
-      loadedObj->primitives.push_back(tri2);
+      WavefrontObj::TriangleRecord tri2;
+      tri2.verts[0] = verts[0];
+      tri2.verts[1] = verts[2];
+      tri2.verts[2] = verts[3];
+      tri2.material = material;
+      loadedObj->triangles.push_back(tri2);
     }
   } else {
     ss << "Unsupported primitive!";
@@ -274,7 +316,7 @@ WavefrontObjFileLoader::loadObj(std::string const& pathString, bool const yIsUp)
     Material mat;
     mat.useVertexColors = true;
     mat.matFilePath = filePath.string();
-    materials.insert(std::pair<std::string, Material>(currentMat, mat));
+    materials[currentMat] = std::make_shared<Material>(mat);
     std::string line;
     try {
       while (true) { // Loop until EndOfReadingException
@@ -321,8 +363,7 @@ WavefrontObjFileLoader::loadObj(std::string const& pathString, bool const yIsUp)
         // Read materials
         else if (lineParts[0] == "mtllib") {
           std::string s = filePath.parent_path().string() + "/" + lineParts[1];
-          std::map<std::string, Material> mats =
-            MaterialsFileReader::loadMaterials(s);
+          auto mats = MaterialsFileReader::loadMaterials(s);
           materials.insert(mats.begin(), mats.end());
         }
 

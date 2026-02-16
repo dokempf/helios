@@ -1,10 +1,11 @@
 #ifdef PCL_BINDING
 
-#include <Primitive.h>
+#include <AABB.h>
 #include <VHStaticObjectAdapter.h>
-#include <Voxel.h>
+#include <util/HeliosException.h>
 
 #include <functional>
+#include <vector>
 
 using visualhelios::VHStaticObjectAdapter;
 
@@ -13,73 +14,87 @@ using visualhelios::VHStaticObjectAdapter;
 void
 VHStaticObjectAdapter::buildPolymesh()
 {
-  // Select adequate function to add primitives to polymesh
-  std::function<void(Primitive*, int&)> addPrimitiveToPolymesh; // Add func
-  if (staticObj.getPrimitiveType() == ScenePart::PrimitiveType::TRIANGLE) {
-    addPrimitiveToPolymesh = [&](Primitive* primitive, int& offset) -> void {
-      addTriangleToPolymesh(primitive, offset);
+  // Select adequate function to add geometry to polymesh.
+  std::function<void(std::size_t, int&)> addGeometryToPolymesh;
+  if (staticObj.getGeometryType() == ScenePart::GeometryType::TRIANGLE) {
+    addGeometryToPolymesh = [&](std::size_t geometryIndex,
+                                int& offset) -> void {
+      addTriangleToPolymesh(geometryIndex, offset);
     };
-  } else if (staticObj.getPrimitiveType() == ScenePart::PrimitiveType::VOXEL) {
-    addPrimitiveToPolymesh = [&](Primitive* primitive, int& offset) -> void {
-      addVoxelToPolymesh(primitive, offset);
+  } else if (staticObj.getGeometryType() == ScenePart::GeometryType::VOXEL ||
+             staticObj.getGeometryType() ==
+               ScenePart::GeometryType::DETAILED_VOXEL) {
+    addGeometryToPolymesh = [&](std::size_t geometryIndex,
+                                int& offset) -> void {
+      addVoxelToPolymesh(geometryIndex, offset);
     };
   } else {
     throw HeliosException("VHStaticObjectAdapter::buildPolymesh failed.\n"
-                          "Type of primitive cannot be recognized");
+                          "Geometry type cannot be recognized");
   }
 
   // Instantiate a new polymesh replacing the old one, if any
   constructPolymesh();
   vertices.clear();
 
-  // Add each primitive to the polymesh
+  // Add each geometry element to the polymesh.
   int offset = 0; // To handle vertex indices
-  vector<Primitive*> const& primitives = staticObj.mPrimitives;
-  for (Primitive* primitive : primitives) {    // For each primitive in object
-    addPrimitiveToPolymesh(primitive, offset); // Add it to the polymesh
+  std::size_t const count = staticObj.geometryCount();
+  for (std::size_t i = 0; i < count; ++i) {
+    addGeometryToPolymesh(i, offset);
   }
 }
 
 // ***  UTILS  *** //
 // *************** //
 void
-VHStaticObjectAdapter::addTriangleToPolymesh(Primitive* primitive, int& offset)
+VHStaticObjectAdapter::addTriangleToPolymesh(std::size_t geometryIndex,
+                                             int& offset)
 {
-  pcl::Vertices verts; // Vertex connection order for the primitive
-  Vertex* primitiveVerts = primitive->getVertices();
-  for (int i = 0; i < 3; ++i) {
-    vertexToMesh(primitiveVerts[i]);
-    verts.vertices.push_back(offset + i); // Register vertex order
+  pcl::Vertices verts;
+  std::size_t const n = staticObj.geometryDynamicVertexCount(geometryIndex);
+  if (n < 3) {
+    return;
   }
-  vertices.push_back(verts); // Register primitive order of vertices
-  offset += 3;               // Update vertex start index for next primitive
+  for (int i = 0; i < 3; ++i) {
+    Vertex vertex;
+    vertex.pos = staticObj.geometryDynamicVertexPosition(geometryIndex, i);
+    vertex.normal = staticObj.geometryDynamicVertexNormal(geometryIndex, i);
+    vertexToMesh(vertex);
+    verts.vertices.push_back(offset + i);
+  }
+  vertices.push_back(verts);
+  offset += 3;
 }
 void
-VHStaticObjectAdapter::addVoxelToPolymesh(Primitive* primitive, int& offset)
+VHStaticObjectAdapter::addVoxelToPolymesh(std::size_t geometryIndex,
+                                          int& offset)
 {
-  // Get all vertices from voxel
-  Vertex& c = primitive->getVertices()[0];
-  double const halfSize = ((Voxel*)primitive)->halfSize;
-  double const fullSize = 2.0 * halfSize;
-  glm::dvec3 halfVec(halfSize, halfSize, halfSize);
+  std::shared_ptr<AABB> box = staticObj.geometryAABB(geometryIndex);
+  if (box == nullptr) {
+    return;
+  }
+  glm::dvec3 const mn = box->getMin();
+  glm::dvec3 const mx = box->getMax();
   Vertex A;
-  A.pos = c.pos - halfVec;
+  A.pos = glm::dvec3(mn.x, mn.y, mn.z);
   Vertex B;
-  B.pos = A.pos + glm::dvec3(fullSize, 0, 0);
+  B.pos = glm::dvec3(mx.x, mn.y, mn.z);
   Vertex C;
-  C.pos = A.pos + glm::dvec3(0, 0, fullSize);
+  C.pos = glm::dvec3(mn.x, mn.y, mx.z);
   Vertex D;
-  D.pos = B.pos + glm::dvec3(0, 0, fullSize);
+  D.pos = glm::dvec3(mx.x, mn.y, mx.z);
   Vertex E;
-  E.pos = A.pos + glm::dvec3(0, fullSize, 0);
+  E.pos = glm::dvec3(mn.x, mx.y, mn.z);
   Vertex F;
-  F.pos = E.pos + glm::dvec3(fullSize, 0, 0);
+  F.pos = glm::dvec3(mx.x, mx.y, mn.z);
   Vertex G;
-  G.pos = E.pos + glm::dvec3(0, 0, fullSize);
+  G.pos = glm::dvec3(mn.x, mx.y, mx.z);
   Vertex H;
-  H.pos = c.pos + halfVec;
+  H.pos = glm::dvec3(mx.x, mx.y, mx.z);
 
   // Put all vertices into the mesh
+  int const base = offset;
   vertexToMesh(A);
   vertexToMesh(B);
   vertexToMesh(C);
@@ -88,57 +103,19 @@ VHStaticObjectAdapter::addVoxelToPolymesh(Primitive* primitive, int& offset)
   vertexToMesh(F);
   vertexToMesh(G);
   vertexToMesh(H);
-  offset += 8; // Update vertex start index for next primitive
+  offset += 8;
 
-  // Register vertex order
-  // Lower face
-  pcl::Vertices lower; // Vertex connection order for the lower face
-  lower.vertices.push_back(offset);
-  lower.vertices.push_back(offset + 4);
-  lower.vertices.push_back(offset + 5);
-  lower.vertices.push_back(offset + 1);
-  lower.vertices.push_back(offset);
-  vertices.push_back(lower); // Register lower face
-  // Front face
-  pcl::Vertices front; // Vertex connection order for the front face
-  front.vertices.push_back(offset);
-  front.vertices.push_back(offset + 1);
-  front.vertices.push_back(offset + 3);
-  front.vertices.push_back(offset + 2);
-  front.vertices.push_back(offset);
-  vertices.push_back(front); // Register front face
-  // Left face
-  pcl::Vertices left; // Vertex connection order for the left face
-  left.vertices.push_back(offset);
-  left.vertices.push_back(offset + 4);
-  left.vertices.push_back(offset + 6);
-  left.vertices.push_back(offset + 2);
-  left.vertices.push_back(offset);
-  vertices.push_back(left); // Register left face
-  // Back face
-  pcl::Vertices back; // Vertex connection order for the back face
-  back.vertices.push_back(offset + 4);
-  back.vertices.push_back(offset + 6);
-  back.vertices.push_back(offset + 7);
-  back.vertices.push_back(offset + 5);
-  back.vertices.push_back(offset + 4);
-  vertices.push_back(back); // Register back face
-  // Right face
-  pcl::Vertices right; // Vertex connection order for the right face
-  right.vertices.push_back(offset + 1);
-  right.vertices.push_back(offset + 3);
-  right.vertices.push_back(offset + 7);
-  right.vertices.push_back(offset + 5);
-  right.vertices.push_back(offset + 1);
-  vertices.push_back(right); // Register right face
-  // Upper face
-  pcl::Vertices upper; // Vertex connection order for the upper face
-  upper.vertices.push_back(offset + 2);
-  upper.vertices.push_back(offset + 3);
-  upper.vertices.push_back(offset + 7);
-  upper.vertices.push_back(offset + 6);
-  upper.vertices.push_back(offset + 2);
-  vertices.push_back(upper); // Register upper face
+  auto addFace = [&](std::initializer_list<int> idxs) {
+    pcl::Vertices face;
+    face.vertices.insert(face.vertices.end(), idxs.begin(), idxs.end());
+    vertices.push_back(face);
+  };
+  addFace({ base + 0, base + 4, base + 5, base + 1, base + 0 }); // Lower
+  addFace({ base + 0, base + 1, base + 3, base + 2, base + 0 }); // Front
+  addFace({ base + 0, base + 4, base + 6, base + 2, base + 0 }); // Left
+  addFace({ base + 4, base + 6, base + 7, base + 5, base + 4 }); // Back
+  addFace({ base + 1, base + 3, base + 7, base + 5, base + 1 }); // Right
+  addFace({ base + 2, base + 3, base + 7, base + 6, base + 2 }); // Upper
 }
 
 #endif

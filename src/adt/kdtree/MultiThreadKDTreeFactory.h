@@ -88,7 +88,7 @@ protected:
    * @brief The maximum geometry depth level \f$d^*\f$ as explained in the
    *  MultiThreadKDTreeFactory::buildRecursiveGeometryLevel
    * It is updated accordingly always that
-   *  MultiThreadKDTreeFactory::makeFromPrimitivesUnsafe is called
+   *  MultiThreadKDTreeFactory::makeFromGeometryRefsUnsafe is called
    * @see MultiThreadKDTreeFactory::masters
    */
   int maxGeometryDepth;
@@ -166,10 +166,10 @@ public:
    * @brief Build a KDTree which type depends on current KDTree factory
    *  (MultiThreadKDTreeFactory::kdtf) on a multi thread basis
    * @see MultiThreadKDTreeFactory::kdtf
-   * @see KDTreeFactory::makeFromPrimitivesUnsafe
+   * @see KDTreeFactory::makeFromGeometryRefsUnsafe
    */
-  KDTreeNodeRoot* makeFromPrimitivesUnsafe(
-    std::vector<Primitive*>& primitives,
+  KDTreeNodeRoot* makeFromGeometryRefsUnsafe(
+    std::vector<GeometryRef>& primitives,
     bool const computeStats = false,
     bool const reportStats = false) override;
 
@@ -209,7 +209,7 @@ protected:
    */
   KDTreeNode* buildRecursive(KDTreeNode* parent,
                              bool const left,
-                             std::vector<Primitive*>& primitives,
+                             std::vector<GeometryRef>& primitives,
                              int const depth,
                              int const index) override;
   /**
@@ -303,7 +303,7 @@ protected:
    */
   KDTreeNode* buildRecursiveGeometryLevel(KDTreeNode* parent,
                                           bool const left,
-                                          std::vector<Primitive*>& primitives,
+                                          std::vector<GeometryRef>& primitives,
                                           int const depth,
                                           int const index);
   /**
@@ -313,11 +313,11 @@ protected:
    */
   void buildChildrenGeometryLevel(KDTreeNode* node,
                                   KDTreeNode* parent,
-                                  std::vector<Primitive*> const& primitives,
+                                  std::vector<GeometryRef> const& primitives,
                                   int const depth,
                                   int const index,
-                                  std::vector<Primitive*>& leftPrimitives,
-                                  std::vector<Primitive*>& rightPrimitives,
+                                  std::vector<GeometryRef>& leftPrimitives,
+                                  std::vector<GeometryRef>& rightPrimitives,
                                   int const auxiliarThreads);
   /**
    * @brief Recursively build a KDTree for given primitives using given
@@ -343,7 +343,7 @@ protected:
    */
   KDTreeNode* buildRecursiveNodeLevel(KDTreeNode* parent,
                                       bool const left,
-                                      std::vector<Primitive*>& primitives,
+                                      std::vector<GeometryRef>& primitives,
                                       int const depth,
                                       int const index);
   /**
@@ -360,7 +360,7 @@ protected:
    */
   void reportKDTreeStats(
     KDTreeNodeRoot* root,
-    std::vector<Primitive*> const& primitives) const override
+    std::vector<GeometryRef> const& primitives) const override
   {
     kdtf->reportKDTreeStats(root, primitives);
   }

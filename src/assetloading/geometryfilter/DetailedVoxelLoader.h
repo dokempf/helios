@@ -1,6 +1,7 @@
 #pragma once
 
 #include "AbstractGeometryFilter.h"
+#include <DetailedVoxelScenePart.h>
 #include <string>
 
 /**
@@ -20,7 +21,7 @@ public:
    * @see AbstractGeometryFilter::AbstractGeometryFilter(ScenePart*)
    */
   DetailedVoxelLoader()
-    : AbstractGeometryFilter(new ScenePart())
+    : AbstractGeometryFilter(new DetailedVoxelScenePart())
   {
   }
 

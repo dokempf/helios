@@ -14,15 +14,15 @@ public:
     );
   }
 
-  KDTreeNodeRoot* makeFromPrimitivesUnsafe(
-    std::vector<Primitive*>& primitives,
+  KDTreeNodeRoot* makeFromGeometryRefsUnsafe(
+    std::vector<GeometryRef>& geometryRefs,
     bool const computeStats = false,
     bool const reportStats = false) override
   {
-    PYBIND11_OVERLOAD_PURE(KDTreeNodeRoot*,          // Return type
-                           KDTreeFactory,            // Parent class
-                           makeFromPrimitivesUnsafe, // Method name
-                           primitives,               // Arguments
+    PYBIND11_OVERLOAD_PURE(KDTreeNodeRoot*,            // Return type
+                           KDTreeFactory,              // Parent class
+                           makeFromGeometryRefsUnsafe, // Method name
+                           geometryRefs,               // Arguments
                            computeStats,
                            reportStats);
   }

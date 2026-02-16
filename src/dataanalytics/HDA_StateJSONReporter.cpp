@@ -285,13 +285,23 @@ void
 HDA_StateJSONReporter::reportScene()
 {
   Scene* sc = sp->mScanner->platform->scene.get();
+  std::size_t numPrimitives = 0;
+  std::size_t numVertices = 0;
+  for (std::shared_ptr<ScenePart> const& part : sc->parts) {
+    if (part != nullptr) {
+      numPrimitives += part->geometryCount();
+      for (std::size_t i = 0; i < part->geometryCount(); ++i) {
+        numVertices += part->geometryVertexCount(i);
+      }
+    }
+  }
   std::stringstream ss;
   ss << openEntry("scene", 3, EntryType::OBJECT)
      << craftEntry("bbox_min", sc->getBBox()->getMin(), 4)
      << craftEntry("bbox_max", sc->getBBox()->getMax(), 4)
      << craftEntry("bbox_crs_min", sc->getBBoxCRS()->getMin(), 4)
      << craftEntry("bbox_crs_max", sc->getBBoxCRS()->getMax(), 4)
-     << craftEntry("numPrimitives", sc->primitives.size(), 4)
+     << craftEntry("numPrimitives", numPrimitives, 4)
      << openEntry("parts", 4, EntryType::ARRAY);
   size_t const m = sc->parts.size() - 1;
   for (size_t i = 0; i < m; ++i) {
@@ -303,7 +313,7 @@ HDA_StateJSONReporter::reportScene()
   ssKey << "part_" << m;
   ss << craftEntry(ssKey.str(), *(sc->parts[m]), 5, false, true);
   ss << closeEntry(4, false, EntryType::ARRAY) // Close parts
-     << craftEntry("numVertices", sc->getAllVertices().size(), 4)
+     << craftEntry("numVertices", numVertices, 4)
      << craftEntry("hasMovingObjects", sc->hasMovingObjects(), 4, false, true)
      << closeEntry(3, false, EntryType::OBJECT) // Close scene
     ;
@@ -468,6 +478,10 @@ HDA_StateJSONReporter::craftEntry(std::string const& key,
                                   bool const asString,
                                   bool const last)
 {
+  std::size_t numVertices = 0;
+  for (std::size_t i = 0; i < sp.geometryCount(); ++i) {
+    numVertices += sp.geometryVertexCount(i);
+  }
   std::stringstream ss;
   int const d2 = depth + 1;
   std::shared_ptr<AABB> bound = sp.bound;
@@ -478,9 +492,9 @@ HDA_StateJSONReporter::craftEntry(std::string const& key,
   ss << openEntry(depth, EntryType::OBJECT)
      << craftEntry("ScenePartKey", key, d2, true)
      << craftEntry("ID", sp.mId, d2, true)
-     << craftEntry("primitiveType", sp.primitiveType, d2)
-     << craftEntry("numPrimitives", sp.mPrimitives.size(), d2)
-     << craftEntry("numVertices", sp.getAllVertices().size(), d2)
+     << craftEntry("geometryType", sp.geometryType, d2)
+     << craftEntry("numPrimitives", sp.geometryCount(), d2)
+     << craftEntry("numVertices", numVertices, d2)
      << craftEntry("centroid", sp.centroid, d2)
      << craftEntry("bound_min", boundMin, d2)
      << craftEntry("bound_max", boundMax, d2)
@@ -495,7 +509,7 @@ HDA_StateJSONReporter::craftEntry(std::string const& key,
      << craftEntry("scale", sp.mScale, d2)
      << craftEntry("forceOnGround", sp.forceOnGround, d2)
      << craftEntry("objectType", sp.getType(), d2)
-     << craftEntry("primitiveType", sp.getPrimitiveType(), d2, false, true)
+     << craftEntry("geometryType", sp.getGeometryType(), d2, false, true)
      << closeEntry(depth, last, EntryType::OBJECT);
   return ss.str();
 }
