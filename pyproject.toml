@@ -10,6 +10,13 @@ name = "pyhelios"
 dynamic = ["version"]
 description = "The HELIOS++ Virtual Laser Scanning Simulator"
 readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "importlib-resources",
+    "matplotlib",
+    "numpy",
+    "xmlschema",
+]
 maintainers = [
     { name = "HELIOS++ dev team", email = "helios@uni-heidelberg.de" },
 ]

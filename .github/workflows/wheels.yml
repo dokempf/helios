@@ -1,0 +1,57 @@
+name: Build wheels
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-wheels:
+    name: Build wheels on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-24.04
+          # - os: windows-2022
+          # - os: macos-14
+          #   target: "14.0"
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build wheels
+        uses: pypa/cibuildwheel@v3.4.1
+        env:
+          # For now, we only build 3.11 to save a bit of time
+          CIBW_BUILD: cp311-*
+          CIBW_SKIP: "musllinux* cp3??t-*"
+          CIBW_TEST_COMMAND: "helios --version"
+          CIBW_ENVIRONMENT_LINUX: >-
+            SETUPTOOLS_SCM_SUBPROCESS_TIMEOUT=120
+            CONDA_PREFIX=/opt/helios-conda
+            PATH="$PATH:/opt/helios-conda/bin:/opt/helios-micromamba/bin"
+            CMAKE_PREFIX_PATH="/opt/helios-conda"
+            LD_LIBRARY_PATH="/opt/helios-conda/lib:$LD_LIBRARY_PATH"
+            CC=/opt/helios-conda/bin/x86_64-conda-linux-gnu-cc
+            CXX=/opt/helios-conda/bin/x86_64-conda-linux-gnu-c++
+          # This matches the default conda sysroot
+          CIBW_MANYLINUX_X86_64_IMAGE: manylinux2014
+          # Install micromamba inside cibuildwheel's build environment. On Linux
+          # this runs inside the manylinux container, not on the Actions host.
+          CIBW_BEFORE_ALL_LINUX: >-
+            mkdir -p /opt/helios-micromamba &&
+            curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest |
+            tar -xvj -C /opt/helios-micromamba bin/micromamba && which micromamba
+          CIBW_BEFORE_BUILD_LINUX: >-
+            rm -rf "$CONDA_PREFIX" &&
+            PYTHON_VERSION=$(python -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")') &&
+            micromamba create -y -p "$CONDA_PREFIX" -f environment-dev.yml "python=${PYTHON_VERSION}" gcc gxx
+        with:
+          output-dir: wheelhouse
+
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
