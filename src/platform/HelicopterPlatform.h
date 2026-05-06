@@ -6,6 +6,9 @@
 
 #include "maths/Rotation.h"
 
+#define _USE_MATH_DEFINES
+#include <cmath>
+
 /**
  * @brief Class representing a helicopter platform
  */
